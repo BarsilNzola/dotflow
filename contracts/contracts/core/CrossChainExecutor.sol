@@ -2,7 +2,7 @@
 pragma solidity ^0.8.23;
 
 import "@openzeppelin/contracts/access/AccessControl.sol";
-import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
@@ -158,7 +158,7 @@ contract CrossChainExecutor is AccessControl, ReentrancyGuard, EIP712, IXCM {
             timeout: timeout
         });
 
-        return sendXCM(instruction);
+        return this.sendXCM{value: msg.value}(instruction);
     }
 
     function executeXCM(
@@ -298,7 +298,7 @@ contract CrossChainExecutor is AccessControl, ReentrancyGuard, EIP712, IXCM {
     function _calculateFee(
         uint32 destinationChainId,
         uint64 weight,
-        uint256 amount
+        uint256 /* amount */
     ) private view returns (uint256) {
         ChainConfig storage config = _chainConfigs[destinationChainId];
         if (!config.isActive) return type(uint256).max;

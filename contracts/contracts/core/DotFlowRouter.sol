@@ -2,19 +2,18 @@
 pragma solidity ^0.8.23;
 
 import "@openzeppelin/contracts/access/AccessControl.sol";
-import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
-import "@openzeppelin/contracts/security/Pausable.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/utils/Pausable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
-import "@openzeppelin/contracts/utils/Counters.sol";
 import "../interfaces/ILiquidityAdapter.sol";
 import "../interfaces/IXCM.sol";
 
 contract DotFlowRouter is AccessControl, ReentrancyGuard, Pausable {
     using SafeERC20 for IERC20;
     using EnumerableSet for EnumerableSet.AddressSet;
-    using Counters for Counters.Counter;
+    using EnumerableSet for EnumerableSet.Bytes32Set;
 
     bytes32 public constant ROUTER_ADMIN = keccak256("ROUTER_ADMIN");
     bytes32 public constant LIQUIDITY_MANAGER = keccak256("LIQUIDITY_MANAGER");
@@ -51,11 +50,12 @@ contract DotFlowRouter is AccessControl, ReentrancyGuard, Pausable {
         uint64 timeout;
     }
 
-    Counters.Counter private _swapNonces;
+    // Replace Counters.Counter with uint256
+    uint256 private _swapNonces;
     mapping(bytes32 => SwapRequest) private _swapRequests;
     mapping(bytes32 => CrossChainSwapRequest) private _crossChainSwaps;
     mapping(bytes32 => bool) private _executedSwaps;
-    mapping(address => EnumerableSet.AddressSet) private _userSwaps;
+    mapping(address => EnumerableSet.Bytes32Set) private _userSwaps;
     mapping(address => mapping(address => uint256)) private _userSwapCount;
     
     EnumerableSet.AddressSet private _activeAdapters;
@@ -140,6 +140,9 @@ contract DotFlowRouter is AccessControl, ReentrancyGuard, Pausable {
         
         _feeCollector = feeCollector;
         _protocolFee = protocolFee;
+        
+        // Initialize nonce to 1 (or 0, your choice)
+        _swapNonces = 1;
     }
 
     function swap(
@@ -162,7 +165,8 @@ contract DotFlowRouter is AccessControl, ReentrancyGuard, Pausable {
         if (recipient == address(0)) revert ZeroAddress();
         if (path.isCrossChain) revert("Use crossChainSwap for cross-chain transfers");
 
-        swapId = _generateSwapId(msg.sender, tokenIn, tokenOut, amountIn, _swapNonces.current());
+        // Use current nonce directly without .current()
+        swapId = _generateSwapId(msg.sender, tokenIn, tokenOut, amountIn, _swapNonces);
         
         SwapRequest storage request = _swapRequests[swapId];
         request.id = swapId;
@@ -174,9 +178,10 @@ contract DotFlowRouter is AccessControl, ReentrancyGuard, Pausable {
         request.recipient = recipient;
         request.deadline = deadline;
         request.path = path;
-        request.nonce = _swapNonces.current();
+        request.nonce = _swapNonces;
         
-        _swapNonces.increment();
+        // Increment nonce manually
+        _swapNonces++;
         _userSwaps[msg.sender].add(swapId);
         _userSwapCount[msg.sender][tokenIn]++;
 
@@ -229,7 +234,8 @@ contract DotFlowRouter is AccessControl, ReentrancyGuard, Pausable {
         if (!path.isCrossChain) revert("Path must be cross-chain");
         if (address(_xcmExecutor) == address(0)) revert("XCM executor not set");
 
-        swapId = _generateSwapId(msg.sender, tokenIn, tokenOut, amountIn, _swapNonces.current());
+        // Use current nonce directly
+        swapId = _generateSwapId(msg.sender, tokenIn, tokenOut, amountIn, _swapNonces);
         
         SwapRequest storage swapRequest = _swapRequests[swapId];
         swapRequest.id = swapId;
@@ -241,9 +247,10 @@ contract DotFlowRouter is AccessControl, ReentrancyGuard, Pausable {
         swapRequest.recipient = address(this);
         swapRequest.deadline = deadline;
         swapRequest.path = path;
-        swapRequest.nonce = _swapNonces.current();
+        swapRequest.nonce = _swapNonces;
 
-        _swapNonces.increment();
+        // Increment nonce manually
+        _swapNonces++;
 
         IERC20(tokenIn).safeTransferFrom(msg.sender, address(this), amountIn);
 
@@ -288,6 +295,9 @@ contract DotFlowRouter is AccessControl, ReentrancyGuard, Pausable {
 
         return (swapId, xcmMessageId);
     }
+
+    // ... rest of the contract remains exactly the same ...
+    // (all functions below this point are unchanged)
 
     function _executeSwap(SwapRequest memory request) private returns (uint256 amountOut) {
         uint256 currentAmount = request.amountIn;

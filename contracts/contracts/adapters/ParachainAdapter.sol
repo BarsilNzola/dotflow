@@ -2,7 +2,7 @@
 pragma solidity ^0.8.23;
 
 import "@openzeppelin/contracts/access/AccessControl.sol";
-import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
@@ -12,6 +12,7 @@ import "../interfaces/IXCM.sol";
 contract ParachainAdapter is ILiquidityAdapter, AccessControl, ReentrancyGuard {
     using SafeERC20 for IERC20;
     using EnumerableSet for EnumerableSet.AddressSet;
+    using EnumerableSet for EnumerableSet.UintSet;
 
     bytes32 public constant ADAPTER_ADMIN = keccak256("ADAPTER_ADMIN");
     bytes32 public constant BRIDGE_OPERATOR = keccak256("BRIDGE_OPERATOR");
@@ -85,7 +86,7 @@ contract ParachainAdapter is ILiquidityAdapter, AccessControl, ReentrancyGuard {
         address tokenIn,
         address tokenOut,
         uint256 amountIn,
-        uint256 amountOutMin,
+        uint256 /* amountOutMin */,
         address recipient,
         bytes calldata data
     ) external override nonReentrant returns (uint256 amountOut, uint256 fee) {
@@ -143,8 +144,8 @@ contract ParachainAdapter is ILiquidityAdapter, AccessControl, ReentrancyGuard {
     }
 
     function getAmountOut(
-        address tokenIn,
-        address tokenOut,
+        address /* tokenIn */,
+        address /* tokenOut */,
         uint256 amountIn
     ) external view override returns (uint256 amountOut, uint24 fee, uint256 priceImpact) {
         if (amountIn < _minSwapAmount || amountIn > _maxSwapAmount) 
@@ -179,7 +180,7 @@ contract ParachainAdapter is ILiquidityAdapter, AccessControl, ReentrancyGuard {
         return _supportedTokens.contains(token);
     }
 
-    function getReserves(address token) external view override returns (uint256 reserve, uint256 lastUpdate) {
+    function getReserves(address /* token */) external pure override returns (uint256 reserve, uint256 lastUpdate) {
         // Parachain adapters don't maintain reserves
         return (0, 0);
     }
@@ -207,7 +208,7 @@ contract ParachainAdapter is ILiquidityAdapter, AccessControl, ReentrancyGuard {
             isActive: true
         });
 
-        _supportedParachains.add(parachainId);
+        _supportedParachains.add(uint256(parachainId));
 
         emit ParachainConfigured(parachainId, name, bridgeFee);
     }
@@ -346,7 +347,7 @@ contract ParachainAdapter is ILiquidityAdapter, AccessControl, ReentrancyGuard {
         return address(this);
     }
 
-    function _getBridgeCollector(uint32 parachainId) private view returns (address) {
+    function _getBridgeCollector(uint32 /* parachainId */) private view returns (address) {
         // This would be configurable per parachain
         return address(this);
     }
@@ -366,8 +367,8 @@ contract ParachainAdapter is ILiquidityAdapter, AccessControl, ReentrancyGuard {
     function addLiquidity(
         address token,
         uint256 amount,
-        bytes calldata data
-    ) external override onlyRole(BRIDGE_OPERATOR) {
+        bytes calldata /* data */
+    ) external onlyRole(BRIDGE_OPERATOR) {
         IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
         
         emit LiquidityAdded(token, amount, IERC20(token).balanceOf(address(this)));
@@ -376,8 +377,8 @@ contract ParachainAdapter is ILiquidityAdapter, AccessControl, ReentrancyGuard {
     function removeLiquidity(
         address token,
         uint256 amount,
-        bytes calldata data
-    ) external override onlyRole(BRIDGE_OPERATOR) {
+        bytes calldata /* data */
+    ) external onlyRole(BRIDGE_OPERATOR) {
         if (IERC20(token).balanceOf(address(this)) < amount) revert("Insufficient balance");
         
         IERC20(token).safeTransfer(msg.sender, amount);

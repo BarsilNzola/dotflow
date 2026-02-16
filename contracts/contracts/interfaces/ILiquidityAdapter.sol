@@ -14,8 +14,8 @@ interface ILiquidityAdapter {
     }
     
     error AdapterInactive();
-    error InsufficientLiquidity();
-    error SlippageExceeded();
+    error InsufficientLiquidity(uint256 available, uint256 required);
+    error SlippageExceeded(uint256 expected, uint256 actual);
     error TokenNotSupported(address token);
     error InvalidAmount(uint256 amount, uint256 min, uint256 max);
     error SwapFailed();

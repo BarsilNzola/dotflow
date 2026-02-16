@@ -2,7 +2,7 @@
 pragma solidity ^0.8.23;
 
 import "@openzeppelin/contracts/access/AccessControl.sol";
-import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
@@ -118,8 +118,6 @@ contract UniswapV2Adapter is ILiquidityAdapter, AccessControl, ReentrancyGuard {
     event LiquidityProvided(address indexed provider, address indexed tokenA, address indexed tokenB, uint amountA, uint amountB, uint liquidity);
 
     error PairNotInitialized(address tokenA, address tokenB);
-    error InsufficientLiquidity(uint256 available, uint256 required);
-    error SlippageExceeded(uint256 expected, uint256 actual);
     error InvalidPathLength(uint256 length);
     error DeadlineExpired(uint256 deadline, uint256 current);
 
@@ -505,7 +503,7 @@ contract UniswapV2Adapter is ILiquidityAdapter, AccessControl, ReentrancyGuard {
         address token,
         uint256 amount,
         bytes calldata data
-    ) external override onlyRole(LIQUIDITY_PROVIDER) {
+    ) external onlyRole(LIQUIDITY_PROVIDER) {
         (address tokenB, uint256 amountBMin, uint256 amountAMin) = abi.decode(data, (address, uint256, uint256));
         
         IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
@@ -540,7 +538,7 @@ contract UniswapV2Adapter is ILiquidityAdapter, AccessControl, ReentrancyGuard {
         address token,
         uint256 amount,
         bytes calldata data
-    ) external override onlyRole(LIQUIDITY_PROVIDER) {
+    ) external onlyRole(LIQUIDITY_PROVIDER) {
         (address tokenB, uint256 amountAMin, uint256 amountBMin) = abi.decode(data, (address, uint256, uint256));
         
         address pair = _pairInfo[token][tokenB].pair;
