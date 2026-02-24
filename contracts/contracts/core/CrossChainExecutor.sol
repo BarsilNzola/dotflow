@@ -7,11 +7,13 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
+import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import "../interfaces/IXCM.sol";
 
 contract CrossChainExecutor is AccessControl, ReentrancyGuard, EIP712, IXCM {
     using SafeERC20 for IERC20;
     using ECDSA for bytes32;
+    using EnumerableSet for EnumerableSet.Bytes32Set;
 
     bytes32 public constant EXECUTOR_ROLE = keccak256("EXECUTOR_ROLE");
     bytes32 public constant RELAYER_ROLE = keccak256("RELAYER_ROLE");
@@ -48,19 +50,34 @@ contract CrossChainExecutor is AccessControl, ReentrancyGuard, EIP712, IXCM {
         MessageStatus status;
     }
 
+    struct AssetMapping {
+        bytes32 assetId;
+        address tokenAddress;
+        uint8 decimals;
+        bool isNative;
+        bool exists;
+    }
+
     mapping(uint32 => ChainConfig) private _chainConfigs;
     mapping(bytes32 => Message) private _messages;
     mapping(uint32 => mapping(bytes32 => bool)) private _executedMessages;
     mapping(address => mapping(uint32 => uint256)) private _nonces;
+    
+    mapping(uint32 => mapping(bytes32 => address)) private _assetToToken;
+    mapping(address => mapping(uint32 => AssetMapping)) private _tokenToAsset;
+    mapping(uint32 => EnumerableSet.Bytes32Set) private _chainAssets;
 
     uint256 private constant MAX_TIMEOUT = 7 days;
     uint256 private constant MIN_TIMEOUT = 1 hours;
     uint64 private constant MAX_WEIGHT = 10000000000;
     uint256 private constant WEIGHT_DENOMINATOR = 1000000;
 
+    event AssetMapped(uint32 indexed chainId, bytes32 indexed assetId, address indexed token, uint8 decimals, bool isNative);
+    event AssetUnmapped(uint32 indexed chainId, bytes32 indexed assetId, address indexed token);
     event ChainConfigured(uint32 indexed chainId, string name, address gateway, uint256 baseFee);
     event ChainDeactivated(uint32 indexed chainId);
     event MessageStatusUpdated(bytes32 indexed messageId, MessageStatus status);
+    event AssetsTransferred(bytes32 indexed messageId, uint32 indexed chainId, address indexed sender, uint256 assetCount);
 
     constructor() EIP712("CrossChainExecutor", "1") {
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
@@ -138,27 +155,72 @@ contract CrossChainExecutor is AccessControl, ReentrancyGuard, EIP712, IXCM {
         if (assets.length == 0) revert("No assets");
         if (recipient == address(0)) revert InvalidRecipient();
 
+        ChainConfig storage config = _chainConfigs[parachainId];
+        if (!config.isActive) revert ChainNotSupported(parachainId);
+
         uint128 totalAmount = 0;
         for (uint i = 0; i < assets.length; i++) {
-            totalAmount += assets[i].amount;
+            ParachainAsset calldata asset = assets[i];
+            
+            address tokenAddress = _assetToToken[parachainId][asset.assetId];
+            if (tokenAddress == address(0)) revert("Asset not mapped");
+            
+            if (!asset.isNative) {
+                IERC20(tokenAddress).safeTransferFrom(
+                    msg.sender,
+                    address(this),
+                    asset.amount
+                );
+            }
+            totalAmount += asset.amount;
         }
 
-        uint64 weight = _calculateParachainWeight(assets, callData);
+        uint64 weight = _calculateParachainWeight(assets.length, callData.length);
         uint128 transactWeight = weight * 2;
 
-        XCMInstruction memory instruction = XCMInstruction({
-            destinationChainId: parachainId,
-            sender: msg.sender,
-            recipient: recipient,
-            asset: address(0),
-            amount: totalAmount,
-            callData: abi.encode(assets, callData),
-            weight: weight,
-            transactWeight: transactWeight,
-            timeout: timeout
-        });
+        uint256 requiredFee = _calculateFee(parachainId, weight, totalAmount);
+        if (msg.value < requiredFee) revert InsufficientFee(requiredFee, msg.value);
 
-        return this.sendXCM{value: msg.value}(instruction);
+        messageId = _generateMessageId(
+            msg.sender,
+            recipient,
+            address(0),
+            totalAmount,
+            parachainId,
+            _nonces[msg.sender][parachainId]++
+        );
+
+        Message storage message = _messages[messageId];
+        message.id = messageId;
+        message.sourceChainId = uint32(block.chainid);
+        message.destinationChainId = parachainId;
+        message.sender = msg.sender;
+        message.recipient = recipient;
+        message.asset = address(0);
+        message.amount = totalAmount;
+        message.callData = abi.encode(assets, callData);
+        message.timestamp = uint64(block.timestamp);
+        message.timeout = timeout;
+        message.hash = keccak256(abi.encode(assets, callData));
+        message.status = MessageStatus.Pending;
+
+        emit XCMMessagePrepared(
+            messageId,
+            parachainId,
+            msg.sender,
+            recipient,
+            address(0),
+            totalAmount,
+            timeout
+        );
+
+        emit AssetsTransferred(messageId, parachainId, msg.sender, assets.length);
+
+        if (msg.value > requiredFee) {
+            payable(msg.sender).transfer(msg.value - requiredFee);
+        }
+
+        return messageId;
     }
 
     function executeXCM(
@@ -200,12 +262,80 @@ contract CrossChainExecutor is AccessControl, ReentrancyGuard, EIP712, IXCM {
 
         if (instruction.asset != address(0)) {
             IERC20(instruction.asset).safeTransfer(instruction.recipient, instruction.amount);
+        } else {
+            (ParachainAsset[] memory assets, bytes memory originalCallData) = 
+                abi.decode(instruction.callData, (ParachainAsset[], bytes));
+            
+            for (uint i = 0; i < assets.length; i++) {
+                ParachainAsset memory asset = assets[i];
+                if (!asset.isNative) {
+                    address tokenAddress = _assetToToken[instruction.destinationChainId][asset.assetId];
+                    if (tokenAddress != address(0)) {
+                        IERC20(tokenAddress).safeTransfer(instruction.recipient, asset.amount);
+                    }
+                }
+            }
         }
 
         emit XCMMessageExecuted(messageId, bytes32(0), true);
         emit MessageStatusUpdated(messageId, MessageStatus.Executed);
 
         return (true, abi.encode(instruction.recipient, instruction.amount));
+    }
+
+    function mapAsset(
+        uint32 chainId,
+        bytes32 assetId,
+        address tokenAddress,
+        uint8 decimals,
+        bool isNative
+    ) external onlyRole(CONFIGURATOR_ROLE) {
+        if (tokenAddress == address(0) && !isNative) revert("Invalid token address");
+        if (_assetToToken[chainId][assetId] != address(0)) revert("Asset already mapped");
+        
+        _assetToToken[chainId][assetId] = tokenAddress;
+        _tokenToAsset[tokenAddress][chainId] = AssetMapping({
+            assetId: assetId,
+            tokenAddress: tokenAddress,
+            decimals: decimals,
+            isNative: isNative,
+            exists: true
+        });
+        
+        _chainAssets[chainId].add(assetId);
+        
+        emit AssetMapped(chainId, assetId, tokenAddress, decimals, isNative);
+    }
+
+    function unmapAsset(uint32 chainId, bytes32 assetId) external onlyRole(CONFIGURATOR_ROLE) {
+        address tokenAddress = _assetToToken[chainId][assetId];
+        if (tokenAddress == address(0) && !_tokenToAsset[address(0)][chainId].exists) {
+            revert("Asset not mapped");
+        }
+        
+        delete _assetToToken[chainId][assetId];
+        if (tokenAddress != address(0)) {
+            delete _tokenToAsset[tokenAddress][chainId];
+        } else {
+            delete _tokenToAsset[address(0)][chainId];
+        }
+        
+        _chainAssets[chainId].remove(assetId);
+        
+        emit AssetUnmapped(chainId, assetId, tokenAddress);
+    }
+
+    function getTokenForAsset(uint32 chainId, bytes32 assetId) external view returns (address) {
+        return _assetToToken[chainId][assetId];
+    }
+
+    function getAssetForToken(address token, uint32 chainId) external view returns (bytes32 assetId, bool exists) {
+        AssetMapping storage mapping_ = _tokenToAsset[token][chainId];
+        return (mapping_.assetId, mapping_.exists);
+    }
+
+    function getChainAssets(uint32 chainId) external view returns (bytes32[] memory) {
+        return _chainAssets[chainId].values();
     }
 
     function verifyXCM(
@@ -275,6 +405,16 @@ contract CrossChainExecutor is AccessControl, ReentrancyGuard, EIP712, IXCM {
 
         if (message.asset != address(0)) {
             IERC20(message.asset).safeTransfer(message.sender, message.amount);
+        } else {
+            (ParachainAsset[] memory assets,) = abi.decode(message.callData, (ParachainAsset[], bytes));
+            for (uint i = 0; i < assets.length; i++) {
+                if (!assets[i].isNative) {
+                    address tokenAddress = _assetToToken[message.destinationChainId][assets[i].assetId];
+                    if (tokenAddress != address(0)) {
+                        IERC20(tokenAddress).safeTransfer(message.sender, assets[i].amount);
+                    }
+                }
+            }
         }
 
         emit XCMMessageCancelled(messageId);
@@ -352,12 +492,12 @@ contract CrossChainExecutor is AccessControl, ReentrancyGuard, EIP712, IXCM {
     }
 
     function _calculateParachainWeight(
-        ParachainAsset[] memory assets,
-        bytes memory callData
+        uint256 assetsLength,
+        uint256 callDataLength
     ) private pure returns (uint64) {
         uint64 baseWeight = 100000000;
-        uint64 assetWeight = uint64(assets.length) * 1000000;
-        uint64 dataWeight = uint64(callData.length) * 100;
+        uint64 assetWeight = uint64(assetsLength) * 1000000;
+        uint64 dataWeight = uint64(callDataLength) * 100;
         return baseWeight + assetWeight + dataWeight;
     }
 
@@ -400,5 +540,9 @@ contract CrossChainExecutor is AccessControl, ReentrancyGuard, EIP712, IXCM {
 
     function getNonce(address sender, uint32 destinationChainId) external view returns (uint256) {
         return _nonces[sender][destinationChainId];
+    }
+
+    function getChainAssetCount(uint32 chainId) external view returns (uint256) {
+        return _chainAssets[chainId].length();
     }
 }

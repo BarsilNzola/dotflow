@@ -160,24 +160,33 @@ export interface CrossChainExecutorInterface extends Interface {
       | "deactivateChain"
       | "eip712Domain"
       | "executeXCM"
+      | "getAssetForToken"
+      | "getChainAssetCount"
+      | "getChainAssets"
       | "getChainConfig"
       | "getMessageDetails"
       | "getMessageStatus"
       | "getNonce"
       | "getRoleAdmin"
+      | "getTokenForAsset"
       | "grantRole"
       | "hasRole"
+      | "mapAsset"
       | "processExpiredMessages"
       | "renounceRole"
       | "revokeRole"
       | "sendParachainAssets"
       | "sendXCM"
       | "supportsInterface"
+      | "unmapAsset"
       | "verifyXCM"
   ): FunctionFragment;
 
   getEvent(
     nameOrSignatureOrTopic:
+      | "AssetMapped"
+      | "AssetUnmapped"
+      | "AssetsTransferred"
       | "ChainConfigured"
       | "ChainDeactivated"
       | "EIP712DomainChanged"
@@ -242,6 +251,18 @@ export interface CrossChainExecutorInterface extends Interface {
     values: [BytesLike, BytesLike]
   ): string;
   encodeFunctionData(
+    functionFragment: "getAssetForToken",
+    values: [AddressLike, BigNumberish]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "getChainAssetCount",
+    values: [BigNumberish]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "getChainAssets",
+    values: [BigNumberish]
+  ): string;
+  encodeFunctionData(
     functionFragment: "getChainConfig",
     values: [BigNumberish]
   ): string;
@@ -262,12 +283,20 @@ export interface CrossChainExecutorInterface extends Interface {
     values: [BytesLike]
   ): string;
   encodeFunctionData(
+    functionFragment: "getTokenForAsset",
+    values: [BigNumberish, BytesLike]
+  ): string;
+  encodeFunctionData(
     functionFragment: "grantRole",
     values: [BytesLike, AddressLike]
   ): string;
   encodeFunctionData(
     functionFragment: "hasRole",
     values: [BytesLike, AddressLike]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "mapAsset",
+    values: [BigNumberish, BytesLike, AddressLike, BigNumberish, boolean]
   ): string;
   encodeFunctionData(
     functionFragment: "processExpiredMessages",
@@ -298,6 +327,10 @@ export interface CrossChainExecutorInterface extends Interface {
   encodeFunctionData(
     functionFragment: "supportsInterface",
     values: [BytesLike]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "unmapAsset",
+    values: [BigNumberish, BytesLike]
   ): string;
   encodeFunctionData(
     functionFragment: "verifyXCM",
@@ -342,6 +375,18 @@ export interface CrossChainExecutorInterface extends Interface {
   ): Result;
   decodeFunctionResult(functionFragment: "executeXCM", data: BytesLike): Result;
   decodeFunctionResult(
+    functionFragment: "getAssetForToken",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "getChainAssetCount",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "getChainAssets",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
     functionFragment: "getChainConfig",
     data: BytesLike
   ): Result;
@@ -358,8 +403,13 @@ export interface CrossChainExecutorInterface extends Interface {
     functionFragment: "getRoleAdmin",
     data: BytesLike
   ): Result;
+  decodeFunctionResult(
+    functionFragment: "getTokenForAsset",
+    data: BytesLike
+  ): Result;
   decodeFunctionResult(functionFragment: "grantRole", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "hasRole", data: BytesLike): Result;
+  decodeFunctionResult(functionFragment: "mapAsset", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "processExpiredMessages",
     data: BytesLike
@@ -378,7 +428,79 @@ export interface CrossChainExecutorInterface extends Interface {
     functionFragment: "supportsInterface",
     data: BytesLike
   ): Result;
+  decodeFunctionResult(functionFragment: "unmapAsset", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "verifyXCM", data: BytesLike): Result;
+}
+
+export namespace AssetMappedEvent {
+  export type InputTuple = [
+    chainId: BigNumberish,
+    assetId: BytesLike,
+    token: AddressLike,
+    decimals: BigNumberish,
+    isNative: boolean
+  ];
+  export type OutputTuple = [
+    chainId: bigint,
+    assetId: string,
+    token: string,
+    decimals: bigint,
+    isNative: boolean
+  ];
+  export interface OutputObject {
+    chainId: bigint;
+    assetId: string;
+    token: string;
+    decimals: bigint;
+    isNative: boolean;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
+export namespace AssetUnmappedEvent {
+  export type InputTuple = [
+    chainId: BigNumberish,
+    assetId: BytesLike,
+    token: AddressLike
+  ];
+  export type OutputTuple = [chainId: bigint, assetId: string, token: string];
+  export interface OutputObject {
+    chainId: bigint;
+    assetId: string;
+    token: string;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
+export namespace AssetsTransferredEvent {
+  export type InputTuple = [
+    messageId: BytesLike,
+    chainId: BigNumberish,
+    sender: AddressLike,
+    assetCount: BigNumberish
+  ];
+  export type OutputTuple = [
+    messageId: string,
+    chainId: bigint,
+    sender: string,
+    assetCount: bigint
+  ];
+  export interface OutputObject {
+    messageId: string;
+    chainId: bigint;
+    sender: string;
+    assetCount: bigint;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
 }
 
 export namespace ChainConfiguredEvent {
@@ -702,6 +824,24 @@ export interface CrossChainExecutor extends BaseContract {
     "nonpayable"
   >;
 
+  getAssetForToken: TypedContractMethod<
+    [token: AddressLike, chainId: BigNumberish],
+    [[string, boolean] & { assetId: string; exists: boolean }],
+    "view"
+  >;
+
+  getChainAssetCount: TypedContractMethod<
+    [chainId: BigNumberish],
+    [bigint],
+    "view"
+  >;
+
+  getChainAssets: TypedContractMethod<
+    [chainId: BigNumberish],
+    [string[]],
+    "view"
+  >;
+
   getChainConfig: TypedContractMethod<
     [chainId: BigNumberish],
     [CrossChainExecutor.ChainConfigStructOutput],
@@ -728,6 +868,12 @@ export interface CrossChainExecutor extends BaseContract {
 
   getRoleAdmin: TypedContractMethod<[role: BytesLike], [string], "view">;
 
+  getTokenForAsset: TypedContractMethod<
+    [chainId: BigNumberish, assetId: BytesLike],
+    [string],
+    "view"
+  >;
+
   grantRole: TypedContractMethod<
     [role: BytesLike, account: AddressLike],
     [void],
@@ -738,6 +884,18 @@ export interface CrossChainExecutor extends BaseContract {
     [role: BytesLike, account: AddressLike],
     [boolean],
     "view"
+  >;
+
+  mapAsset: TypedContractMethod<
+    [
+      chainId: BigNumberish,
+      assetId: BytesLike,
+      tokenAddress: AddressLike,
+      decimals: BigNumberish,
+      isNative: boolean
+    ],
+    [void],
+    "nonpayable"
   >;
 
   processExpiredMessages: TypedContractMethod<
@@ -780,6 +938,12 @@ export interface CrossChainExecutor extends BaseContract {
     [interfaceId: BytesLike],
     [boolean],
     "view"
+  >;
+
+  unmapAsset: TypedContractMethod<
+    [chainId: BigNumberish, assetId: BytesLike],
+    [void],
+    "nonpayable"
   >;
 
   verifyXCM: TypedContractMethod<
@@ -862,6 +1026,19 @@ export interface CrossChainExecutor extends BaseContract {
     "nonpayable"
   >;
   getFunction(
+    nameOrSignature: "getAssetForToken"
+  ): TypedContractMethod<
+    [token: AddressLike, chainId: BigNumberish],
+    [[string, boolean] & { assetId: string; exists: boolean }],
+    "view"
+  >;
+  getFunction(
+    nameOrSignature: "getChainAssetCount"
+  ): TypedContractMethod<[chainId: BigNumberish], [bigint], "view">;
+  getFunction(
+    nameOrSignature: "getChainAssets"
+  ): TypedContractMethod<[chainId: BigNumberish], [string[]], "view">;
+  getFunction(
     nameOrSignature: "getChainConfig"
   ): TypedContractMethod<
     [chainId: BigNumberish],
@@ -889,6 +1066,13 @@ export interface CrossChainExecutor extends BaseContract {
     nameOrSignature: "getRoleAdmin"
   ): TypedContractMethod<[role: BytesLike], [string], "view">;
   getFunction(
+    nameOrSignature: "getTokenForAsset"
+  ): TypedContractMethod<
+    [chainId: BigNumberish, assetId: BytesLike],
+    [string],
+    "view"
+  >;
+  getFunction(
     nameOrSignature: "grantRole"
   ): TypedContractMethod<
     [role: BytesLike, account: AddressLike],
@@ -901,6 +1085,19 @@ export interface CrossChainExecutor extends BaseContract {
     [role: BytesLike, account: AddressLike],
     [boolean],
     "view"
+  >;
+  getFunction(
+    nameOrSignature: "mapAsset"
+  ): TypedContractMethod<
+    [
+      chainId: BigNumberish,
+      assetId: BytesLike,
+      tokenAddress: AddressLike,
+      decimals: BigNumberish,
+      isNative: boolean
+    ],
+    [void],
+    "nonpayable"
   >;
   getFunction(
     nameOrSignature: "processExpiredMessages"
@@ -943,6 +1140,13 @@ export interface CrossChainExecutor extends BaseContract {
     nameOrSignature: "supportsInterface"
   ): TypedContractMethod<[interfaceId: BytesLike], [boolean], "view">;
   getFunction(
+    nameOrSignature: "unmapAsset"
+  ): TypedContractMethod<
+    [chainId: BigNumberish, assetId: BytesLike],
+    [void],
+    "nonpayable"
+  >;
+  getFunction(
     nameOrSignature: "verifyXCM"
   ): TypedContractMethod<
     [messageId: BytesLike, proof: BytesLike],
@@ -950,6 +1154,27 @@ export interface CrossChainExecutor extends BaseContract {
     "view"
   >;
 
+  getEvent(
+    key: "AssetMapped"
+  ): TypedContractEvent<
+    AssetMappedEvent.InputTuple,
+    AssetMappedEvent.OutputTuple,
+    AssetMappedEvent.OutputObject
+  >;
+  getEvent(
+    key: "AssetUnmapped"
+  ): TypedContractEvent<
+    AssetUnmappedEvent.InputTuple,
+    AssetUnmappedEvent.OutputTuple,
+    AssetUnmappedEvent.OutputObject
+  >;
+  getEvent(
+    key: "AssetsTransferred"
+  ): TypedContractEvent<
+    AssetsTransferredEvent.InputTuple,
+    AssetsTransferredEvent.OutputTuple,
+    AssetsTransferredEvent.OutputObject
+  >;
   getEvent(
     key: "ChainConfigured"
   ): TypedContractEvent<
@@ -1036,6 +1261,39 @@ export interface CrossChainExecutor extends BaseContract {
   >;
 
   filters: {
+    "AssetMapped(uint32,bytes32,address,uint8,bool)": TypedContractEvent<
+      AssetMappedEvent.InputTuple,
+      AssetMappedEvent.OutputTuple,
+      AssetMappedEvent.OutputObject
+    >;
+    AssetMapped: TypedContractEvent<
+      AssetMappedEvent.InputTuple,
+      AssetMappedEvent.OutputTuple,
+      AssetMappedEvent.OutputObject
+    >;
+
+    "AssetUnmapped(uint32,bytes32,address)": TypedContractEvent<
+      AssetUnmappedEvent.InputTuple,
+      AssetUnmappedEvent.OutputTuple,
+      AssetUnmappedEvent.OutputObject
+    >;
+    AssetUnmapped: TypedContractEvent<
+      AssetUnmappedEvent.InputTuple,
+      AssetUnmappedEvent.OutputTuple,
+      AssetUnmappedEvent.OutputObject
+    >;
+
+    "AssetsTransferred(bytes32,uint32,address,uint256)": TypedContractEvent<
+      AssetsTransferredEvent.InputTuple,
+      AssetsTransferredEvent.OutputTuple,
+      AssetsTransferredEvent.OutputObject
+    >;
+    AssetsTransferred: TypedContractEvent<
+      AssetsTransferredEvent.InputTuple,
+      AssetsTransferredEvent.OutputTuple,
+      AssetsTransferredEvent.OutputObject
+    >;
+
     "ChainConfigured(uint32,string,address,uint256)": TypedContractEvent<
       ChainConfiguredEvent.InputTuple,
       ChainConfiguredEvent.OutputTuple,

@@ -36,6 +36,7 @@ contract LiquidityManager is AccessControl, ReentrancyGuard {
         uint256 lastWithdraw;
         uint256 accruedFees;
         uint256 feeDebt;
+        uint256 lastFeeUpdate;
     }
 
     struct PoolMetadata {
@@ -51,6 +52,7 @@ contract LiquidityManager is AccessControl, ReentrancyGuard {
     uint256 private constant MIN_LIQUIDITY_LOCK = 1 days;
     uint256 private constant MAX_UTILIZATION = 9500; // 95%
     uint256 private constant RESERVE_FACTOR_MAX = 2000; // 20%
+    uint256 private constant FEE_PRECISION = 1e18;
 
     mapping(address => Pool) private _pools;
     mapping(address => mapping(address => ProviderPosition)) private _positions;
@@ -71,6 +73,8 @@ contract LiquidityManager is AccessControl, ReentrancyGuard {
     error UtilizationTooHigh(uint256 current, uint256 max);
     error InvalidAmount(uint256 amount);
     error InvalidAddress();
+    error ReserveFactorTooHigh(uint256 provided, uint256 max);
+    error InvalidLiquidityBounds();
 
     event PoolCreated(
         address indexed token,
@@ -142,8 +146,8 @@ contract LiquidityManager is AccessControl, ReentrancyGuard {
         if (token == address(0)) revert InvalidAddress();
         if (_pools[token].isActive) revert PoolAlreadyExists(token);
         if (feeRate > MAX_FEE_RATE) revert FeeRateTooHigh(feeRate, uint24(MAX_FEE_RATE));
-        if (reserveFactor > RESERVE_FACTOR_MAX) revert("Reserve factor too high");
-        if (maxLiquidity <= minLiquidity) revert("Invalid liquidity bounds");
+        if (reserveFactor > RESERVE_FACTOR_MAX) revert ReserveFactorTooHigh(reserveFactor, RESERVE_FACTOR_MAX);
+        if (maxLiquidity <= minLiquidity) revert InvalidLiquidityBounds();
         if (initialLiquidity > 0 && initialLiquidity < minLiquidity) revert("Initial below min");
 
         Pool storage pool = _pools[token];
@@ -176,6 +180,7 @@ contract LiquidityManager is AccessControl, ReentrancyGuard {
             position.shares = initialLiquidity;
             position.entryTimestamp = block.timestamp;
             position.lastDeposit = block.timestamp;
+            position.lastFeeUpdate = block.timestamp;
             
             _poolProviders[token].add(msg.sender);
             
@@ -199,13 +204,10 @@ contract LiquidityManager is AccessControl, ReentrancyGuard {
 
         ProviderPosition storage position = _positions[msg.sender][token];
 
-        uint256 feeDebt = _calculatePendingFees(msg.sender, token);
-        if (feeDebt > 0) {
-            position.accruedFees += feeDebt;
-            position.feeDebt = 0;
-        }
+        // Update pending fees before adding liquidity
+        _updatePendingFees(msg.sender, token);
 
-        shares = _calculateShares(token, amount);
+        shares = amount; // 1:1 share ratio for simplicity
         
         if (position.shares == 0) {
             position.entryTimestamp = block.timestamp;
@@ -214,6 +216,7 @@ contract LiquidityManager is AccessControl, ReentrancyGuard {
 
         position.shares += shares;
         position.lastDeposit = block.timestamp;
+        position.lastFeeUpdate = block.timestamp;
 
         pool.totalLiquidity += amount;
         pool.availableLiquidity += amount;
@@ -246,15 +249,13 @@ contract LiquidityManager is AccessControl, ReentrancyGuard {
             revert LockTimeNotMet(position.entryTimestamp + MIN_LIQUIDITY_LOCK, block.timestamp);
         }
 
-        amount = _calculateAmount(token, shares);
+        // Update pending fees before removing liquidity
+        _updatePendingFees(msg.sender, token);
+
+        amount = shares; // 1:1 ratio since shares = amount
         
         if (pool.availableLiquidity < amount) {
             revert InsufficientLiquidity(pool.availableLiquidity, amount);
-        }
-
-        uint256 feeDebt = _calculatePendingFees(msg.sender, token);
-        if (feeDebt > 0) {
-            position.accruedFees += feeDebt;
         }
 
         uint256 fee = (amount * pool.feeRate) / RATE_PRECISION;
@@ -262,7 +263,7 @@ contract LiquidityManager is AccessControl, ReentrancyGuard {
 
         position.shares -= shares;
         position.lastWithdraw = block.timestamp;
-        position.feeDebt = 0;
+        position.lastFeeUpdate = block.timestamp;
 
         if (position.shares == 0) {
             _poolProviders[token].remove(msg.sender);
@@ -347,14 +348,15 @@ contract LiquidityManager is AccessControl, ReentrancyGuard {
 
         ProviderPosition storage position = _positions[msg.sender][token];
 
-        uint256 pendingFees = _calculatePendingFees(msg.sender, token);
-        uint256 totalFees = position.accruedFees + pendingFees;
+        _updatePendingFees(msg.sender, token);
+        
+        uint256 totalFees = position.accruedFees;
 
         if (totalFees == 0) return 0;
 
         position.accruedFees = 0;
         position.feeDebt = 0;
-        position.lastDeposit = block.timestamp;
+        position.lastFeeUpdate = block.timestamp;
 
         IERC20(token).safeTransfer(msg.sender, totalFees);
 
@@ -376,28 +378,44 @@ contract LiquidityManager is AccessControl, ReentrancyGuard {
         }
     }
 
+    function _updatePendingFees(address provider, address token) private {
+        Pool storage pool = _pools[token];
+        ProviderPosition storage position = _positions[provider][token];
+
+        if (position.shares == 0) return;
+
+        uint256 timeElapsed = block.timestamp - position.lastFeeUpdate;
+        if (timeElapsed == 0) return;
+
+        // Calculate fee per second more safely
+        // feeRate is in basis points (10000 = 100%), so 100 = 1%
+        // We want annual rate: feeRate / RATE_PRECISION = annual rate
+        // Then per second: (feeRate / RATE_PRECISION) / 365 days
+        // To avoid overflow, calculate in stages
+        uint256 annualRate = (pool.feeRate * FEE_PRECISION) / RATE_PRECISION; // fee rate in FEE_PRECISION
+        uint256 ratePerSecond = annualRate / 365 days;
+        
+        uint256 pendingFees = (position.shares * ratePerSecond * timeElapsed) / FEE_PRECISION;
+        
+        if (pendingFees > 0) {
+            position.accruedFees += pendingFees;
+            position.lastFeeUpdate = block.timestamp;
+        }
+    }
+
     function _calculatePendingFees(address provider, address token) private view returns (uint256) {
         Pool storage pool = _pools[token];
         ProviderPosition storage position = _positions[provider][token];
 
         if (position.shares == 0) return 0;
 
-        uint256 timeElapsed = block.timestamp - position.lastDeposit;
-        uint256 feePerSecond = (pool.feeRate * 1e18) / 365 days;
+        uint256 timeElapsed = block.timestamp - position.lastFeeUpdate;
+        if (timeElapsed == 0) return 0;
+
+        uint256 annualRate = (pool.feeRate * FEE_PRECISION) / RATE_PRECISION;
+        uint256 ratePerSecond = annualRate / 365 days;
         
-        return (position.shares * feePerSecond * timeElapsed) / 1e18;
-    }
-
-    function _calculateShares(address token, uint256 amount) private view returns (uint256) {
-        Pool storage pool = _pools[token];
-        if (pool.totalLiquidity == 0) return amount;
-        return (amount * pool.totalLiquidity) / pool.totalLiquidity;
-    }
-
-    function _calculateAmount(address token, uint256 shares) private view returns (uint256) {
-        Pool storage pool = _pools[token];
-        if (pool.totalLiquidity == 0) return 0;
-        return (shares * pool.totalLiquidity) / pool.totalLiquidity;
+        return (position.shares * ratePerSecond * timeElapsed) / FEE_PRECISION;
     }
 
     function _getTokenDecimals(address token) private view returns (uint8) {
@@ -473,8 +491,8 @@ contract LiquidityManager is AccessControl, ReentrancyGuard {
         Pool storage pool = _pools[token];
         if (!pool.isActive) revert PoolNotActive(token);
         if (feeRate > MAX_FEE_RATE) revert FeeRateTooHigh(feeRate, uint24(MAX_FEE_RATE));
-        if (reserveFactor > RESERVE_FACTOR_MAX) revert("Reserve factor too high");
-        if (maxLiquidity <= pool.minLiquidity) revert("Invalid max liquidity");
+        if (reserveFactor > RESERVE_FACTOR_MAX) revert ReserveFactorTooHigh(reserveFactor, RESERVE_FACTOR_MAX);
+        if (maxLiquidity <= pool.minLiquidity) revert InvalidLiquidityBounds();
 
         pool.feeRate = feeRate;
         pool.reserveFactor = reserveFactor;

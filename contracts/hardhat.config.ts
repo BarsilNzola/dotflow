@@ -1,7 +1,7 @@
 import { HardhatUserConfig } from "hardhat/config";
-import "@nomiclabs/hardhat-ethers";
-import "@nomiclabs/hardhat-waffle";
-import "@nomiclabs/hardhat-etherscan";
+import "@nomicfoundation/hardhat-ethers";
+import "@nomicfoundation/hardhat-chai-matchers";
+import "@nomicfoundation/hardhat-verify";
 import "@typechain/hardhat";
 import "hardhat-gas-reporter";
 import "solidity-coverage";
@@ -50,18 +50,6 @@ const config: HardhatUserConfig = {
       gasPrice: "auto"
     }
   },
-  etherscan: {
-    apiKey: {
-      polkadotHub: process.env.ETHERSCAN_API_KEY || ""
-    }
-  },
-  gasReporter: {
-    enabled: process.env.REPORT_GAS === "true",
-    currency: "USD",
-    coinmarketcap: process.env.COINMARKETCAP_API_KEY,
-    outputFile: "gas-report.txt",
-    noColors: true
-  },
   paths: {
     sources: "./contracts",
     tests: "./test",
@@ -71,10 +59,6 @@ const config: HardhatUserConfig = {
   mocha: {
     timeout: 40000
   },
-  typechain: {
-    outDir: "typechain-types",
-    target: "ethers-v6"
-  }
 };
 
 export default config;

@@ -63,19 +63,27 @@ export interface UniswapV2AdapterInterface extends Interface {
       | "DEFAULT_ADMIN_ROLE"
       | "FEE_MANAGER"
       | "LIQUIDITY_PROVIDER"
+      | "MAX_FEE"
       | "addLiquidity(address,uint256,bytes)"
       | "addLiquidity(address,address,uint256,uint256,uint256,uint256,address)"
       | "emergencyWithdraw"
+      | "fee"
+      | "feeCollector"
       | "getAdapterInfo"
       | "getAmountOut"
       | "getAmountsIn"
+      | "getFee"
       | "getPairInfo"
       | "getReserves"
       | "getRoleAdmin"
       | "grantRole"
       | "hasRole"
       | "initializePair"
+      | "isActive"
       | "isTokenSupported"
+      | "maxSwapAmount"
+      | "minSwapAmount"
+      | "name"
       | "removeLiquidity(address,uint256,bytes)"
       | "removeLiquidity(address,address,uint256,uint256,uint256,address)"
       | "removePair"
@@ -124,6 +132,7 @@ export interface UniswapV2AdapterInterface extends Interface {
     functionFragment: "LIQUIDITY_PROVIDER",
     values?: undefined
   ): string;
+  encodeFunctionData(functionFragment: "MAX_FEE", values?: undefined): string;
   encodeFunctionData(
     functionFragment: "addLiquidity(address,uint256,bytes)",
     values: [AddressLike, BigNumberish, BytesLike]
@@ -144,6 +153,11 @@ export interface UniswapV2AdapterInterface extends Interface {
     functionFragment: "emergencyWithdraw",
     values: [AddressLike, AddressLike, BigNumberish]
   ): string;
+  encodeFunctionData(functionFragment: "fee", values?: undefined): string;
+  encodeFunctionData(
+    functionFragment: "feeCollector",
+    values?: undefined
+  ): string;
   encodeFunctionData(
     functionFragment: "getAdapterInfo",
     values?: undefined
@@ -156,6 +170,7 @@ export interface UniswapV2AdapterInterface extends Interface {
     functionFragment: "getAmountsIn",
     values: [BigNumberish, AddressLike, AddressLike]
   ): string;
+  encodeFunctionData(functionFragment: "getFee", values?: undefined): string;
   encodeFunctionData(
     functionFragment: "getPairInfo",
     values: [AddressLike, AddressLike]
@@ -180,10 +195,20 @@ export interface UniswapV2AdapterInterface extends Interface {
     functionFragment: "initializePair",
     values: [AddressLike, AddressLike]
   ): string;
+  encodeFunctionData(functionFragment: "isActive", values?: undefined): string;
   encodeFunctionData(
     functionFragment: "isTokenSupported",
     values: [AddressLike]
   ): string;
+  encodeFunctionData(
+    functionFragment: "maxSwapAmount",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
+    functionFragment: "minSwapAmount",
+    values?: undefined
+  ): string;
+  encodeFunctionData(functionFragment: "name", values?: undefined): string;
   encodeFunctionData(
     functionFragment: "removeLiquidity(address,uint256,bytes)",
     values: [AddressLike, BigNumberish, BytesLike]
@@ -268,6 +293,7 @@ export interface UniswapV2AdapterInterface extends Interface {
     functionFragment: "LIQUIDITY_PROVIDER",
     data: BytesLike
   ): Result;
+  decodeFunctionResult(functionFragment: "MAX_FEE", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "addLiquidity(address,uint256,bytes)",
     data: BytesLike
@@ -278,6 +304,11 @@ export interface UniswapV2AdapterInterface extends Interface {
   ): Result;
   decodeFunctionResult(
     functionFragment: "emergencyWithdraw",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(functionFragment: "fee", data: BytesLike): Result;
+  decodeFunctionResult(
+    functionFragment: "feeCollector",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
@@ -292,6 +323,7 @@ export interface UniswapV2AdapterInterface extends Interface {
     functionFragment: "getAmountsIn",
     data: BytesLike
   ): Result;
+  decodeFunctionResult(functionFragment: "getFee", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "getPairInfo",
     data: BytesLike
@@ -310,10 +342,20 @@ export interface UniswapV2AdapterInterface extends Interface {
     functionFragment: "initializePair",
     data: BytesLike
   ): Result;
+  decodeFunctionResult(functionFragment: "isActive", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "isTokenSupported",
     data: BytesLike
   ): Result;
+  decodeFunctionResult(
+    functionFragment: "maxSwapAmount",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "minSwapAmount",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(functionFragment: "name", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "removeLiquidity(address,uint256,bytes)",
     data: BytesLike
@@ -647,6 +689,8 @@ export interface UniswapV2Adapter extends BaseContract {
 
   LIQUIDITY_PROVIDER: TypedContractMethod<[], [string], "view">;
 
+  MAX_FEE: TypedContractMethod<[], [bigint], "view">;
+
   "addLiquidity(address,uint256,bytes)": TypedContractMethod<
     [token: AddressLike, amount: BigNumberish, data: BytesLike],
     [void],
@@ -679,6 +723,10 @@ export interface UniswapV2Adapter extends BaseContract {
     "nonpayable"
   >;
 
+  fee: TypedContractMethod<[], [bigint], "view">;
+
+  feeCollector: TypedContractMethod<[], [string], "view">;
+
   getAdapterInfo: TypedContractMethod<
     [],
     [ILiquidityAdapter.AdapterInfoStructOutput],
@@ -690,7 +738,7 @@ export interface UniswapV2Adapter extends BaseContract {
     [
       [bigint, bigint, bigint] & {
         amountOut: bigint;
-        fee: bigint;
+        feePercent: bigint;
         priceImpact: bigint;
       }
     ],
@@ -702,6 +750,8 @@ export interface UniswapV2Adapter extends BaseContract {
     [bigint],
     "view"
   >;
+
+  getFee: TypedContractMethod<[], [bigint], "view">;
 
   getPairInfo: TypedContractMethod<
     [tokenA: AddressLike, tokenB: AddressLike],
@@ -743,11 +793,19 @@ export interface UniswapV2Adapter extends BaseContract {
     "nonpayable"
   >;
 
+  isActive: TypedContractMethod<[], [boolean], "view">;
+
   isTokenSupported: TypedContractMethod<
     [token: AddressLike],
     [boolean],
     "view"
   >;
+
+  maxSwapAmount: TypedContractMethod<[], [bigint], "view">;
+
+  minSwapAmount: TypedContractMethod<[], [bigint], "view">;
+
+  name: TypedContractMethod<[], [string], "view">;
 
   "removeLiquidity(address,uint256,bytes)": TypedContractMethod<
     [token: AddressLike, amount: BigNumberish, data: BytesLike],
@@ -823,7 +881,7 @@ export interface UniswapV2Adapter extends BaseContract {
       recipient: AddressLike,
       data: BytesLike
     ],
-    [[bigint, bigint] & { amountOut: bigint; fee: bigint }],
+    [[bigint, bigint] & { amountOut: bigint; feeAmount: bigint }],
     "nonpayable"
   >;
 
@@ -851,6 +909,9 @@ export interface UniswapV2Adapter extends BaseContract {
   getFunction(
     nameOrSignature: "LIQUIDITY_PROVIDER"
   ): TypedContractMethod<[], [string], "view">;
+  getFunction(
+    nameOrSignature: "MAX_FEE"
+  ): TypedContractMethod<[], [bigint], "view">;
   getFunction(
     nameOrSignature: "addLiquidity(address,uint256,bytes)"
   ): TypedContractMethod<
@@ -887,6 +948,12 @@ export interface UniswapV2Adapter extends BaseContract {
     "nonpayable"
   >;
   getFunction(
+    nameOrSignature: "fee"
+  ): TypedContractMethod<[], [bigint], "view">;
+  getFunction(
+    nameOrSignature: "feeCollector"
+  ): TypedContractMethod<[], [string], "view">;
+  getFunction(
     nameOrSignature: "getAdapterInfo"
   ): TypedContractMethod<
     [],
@@ -900,7 +967,7 @@ export interface UniswapV2Adapter extends BaseContract {
     [
       [bigint, bigint, bigint] & {
         amountOut: bigint;
-        fee: bigint;
+        feePercent: bigint;
         priceImpact: bigint;
       }
     ],
@@ -913,6 +980,9 @@ export interface UniswapV2Adapter extends BaseContract {
     [bigint],
     "view"
   >;
+  getFunction(
+    nameOrSignature: "getFee"
+  ): TypedContractMethod<[], [bigint], "view">;
   getFunction(
     nameOrSignature: "getPairInfo"
   ): TypedContractMethod<
@@ -960,8 +1030,20 @@ export interface UniswapV2Adapter extends BaseContract {
     "nonpayable"
   >;
   getFunction(
+    nameOrSignature: "isActive"
+  ): TypedContractMethod<[], [boolean], "view">;
+  getFunction(
     nameOrSignature: "isTokenSupported"
   ): TypedContractMethod<[token: AddressLike], [boolean], "view">;
+  getFunction(
+    nameOrSignature: "maxSwapAmount"
+  ): TypedContractMethod<[], [bigint], "view">;
+  getFunction(
+    nameOrSignature: "minSwapAmount"
+  ): TypedContractMethod<[], [bigint], "view">;
+  getFunction(
+    nameOrSignature: "name"
+  ): TypedContractMethod<[], [string], "view">;
   getFunction(
     nameOrSignature: "removeLiquidity(address,uint256,bytes)"
   ): TypedContractMethod<
@@ -1041,7 +1123,7 @@ export interface UniswapV2Adapter extends BaseContract {
       recipient: AddressLike,
       data: BytesLike
     ],
-    [[bigint, bigint] & { amountOut: bigint; fee: bigint }],
+    [[bigint, bigint] & { amountOut: bigint; feeAmount: bigint }],
     "nonpayable"
   >;
   getFunction(

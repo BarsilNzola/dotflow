@@ -4,3 +4,4 @@
 export * as adapters from "./adapters";
 export * as core from "./core";
 export * as interfaces from "./interfaces";
+export * as mocks from "./mocks";

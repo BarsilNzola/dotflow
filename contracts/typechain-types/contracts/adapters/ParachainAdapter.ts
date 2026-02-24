@@ -125,6 +125,8 @@ export interface ParachainAdapterInterface extends Interface {
       | "getAdapterInfo"
       | "getAmountOut"
       | "getAssetId"
+      | "getBridgeCollector"
+      | "getFeeCollector"
       | "getParachainConfig"
       | "getParachainTokens"
       | "getReserves"
@@ -139,11 +141,14 @@ export interface ParachainAdapterInterface extends Interface {
       | "renounceRole"
       | "revokeRole"
       | "setActive"
+      | "setBridgeCollector"
       | "setFee"
+      | "setFeeCollector"
       | "setSwapLimits"
       | "setXCMExecutor"
       | "supportsInterface"
       | "swapExactTokensForTokens"
+      | "swapExactTokensForTokensWithFee"
       | "unmapToken"
       | "updateParachainConfig"
   ): FunctionFragment;
@@ -152,15 +157,20 @@ export interface ParachainAdapterInterface extends Interface {
     nameOrSignatureOrTopic:
       | "AdapterActivated"
       | "AdapterDeactivated"
+      | "BridgeCollectorUpdated"
       | "BridgeExecuted"
+      | "FeeCollectorUpdated"
       | "LiquidityAdded"
       | "LiquidityRemoved"
       | "ParachainConfigured"
+      | "ProtocolFeeUpdated"
       | "RoleAdminChanged"
       | "RoleGranted"
       | "RoleRevoked"
       | "SwapExecuted"
+      | "SwapLimitsUpdated"
       | "TokenMapped"
+      | "XCMExecutorUpdated"
   ): EventFragment;
 
   encodeFunctionData(
@@ -201,6 +211,14 @@ export interface ParachainAdapterInterface extends Interface {
   encodeFunctionData(
     functionFragment: "getAssetId",
     values: [AddressLike, BigNumberish]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "getBridgeCollector",
+    values: [BigNumberish]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "getFeeCollector",
+    values?: undefined
   ): string;
   encodeFunctionData(
     functionFragment: "getParachainConfig",
@@ -264,8 +282,16 @@ export interface ParachainAdapterInterface extends Interface {
   ): string;
   encodeFunctionData(functionFragment: "setActive", values: [boolean]): string;
   encodeFunctionData(
+    functionFragment: "setBridgeCollector",
+    values: [BigNumberish, AddressLike]
+  ): string;
+  encodeFunctionData(
     functionFragment: "setFee",
     values: [BigNumberish]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "setFeeCollector",
+    values: [AddressLike]
   ): string;
   encodeFunctionData(
     functionFragment: "setSwapLimits",
@@ -281,6 +307,17 @@ export interface ParachainAdapterInterface extends Interface {
   ): string;
   encodeFunctionData(
     functionFragment: "swapExactTokensForTokens",
+    values: [
+      AddressLike,
+      AddressLike,
+      BigNumberish,
+      BigNumberish,
+      AddressLike,
+      BytesLike
+    ]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "swapExactTokensForTokensWithFee",
     values: [
       AddressLike,
       AddressLike,
@@ -336,6 +373,14 @@ export interface ParachainAdapterInterface extends Interface {
   ): Result;
   decodeFunctionResult(functionFragment: "getAssetId", data: BytesLike): Result;
   decodeFunctionResult(
+    functionFragment: "getBridgeCollector",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "getFeeCollector",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
     functionFragment: "getParachainConfig",
     data: BytesLike
   ): Result;
@@ -376,7 +421,15 @@ export interface ParachainAdapterInterface extends Interface {
   ): Result;
   decodeFunctionResult(functionFragment: "revokeRole", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "setActive", data: BytesLike): Result;
+  decodeFunctionResult(
+    functionFragment: "setBridgeCollector",
+    data: BytesLike
+  ): Result;
   decodeFunctionResult(functionFragment: "setFee", data: BytesLike): Result;
+  decodeFunctionResult(
+    functionFragment: "setFeeCollector",
+    data: BytesLike
+  ): Result;
   decodeFunctionResult(
     functionFragment: "setSwapLimits",
     data: BytesLike
@@ -391,6 +444,10 @@ export interface ParachainAdapterInterface extends Interface {
   ): Result;
   decodeFunctionResult(
     functionFragment: "swapExactTokensForTokens",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "swapExactTokensForTokensWithFee",
     data: BytesLike
   ): Result;
   decodeFunctionResult(functionFragment: "unmapToken", data: BytesLike): Result;
@@ -424,6 +481,28 @@ export namespace AdapterDeactivatedEvent {
   export type LogDescription = TypedLogDescription<Event>;
 }
 
+export namespace BridgeCollectorUpdatedEvent {
+  export type InputTuple = [
+    parachainId: BigNumberish,
+    oldCollector: AddressLike,
+    newCollector: AddressLike
+  ];
+  export type OutputTuple = [
+    parachainId: bigint,
+    oldCollector: string,
+    newCollector: string
+  ];
+  export interface OutputObject {
+    parachainId: bigint;
+    oldCollector: string;
+    newCollector: string;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
 export namespace BridgeExecutedEvent {
   export type InputTuple = [
     messageId: BytesLike,
@@ -442,6 +521,22 @@ export namespace BridgeExecutedEvent {
     parachainId: bigint;
     token: string;
     amount: bigint;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
+export namespace FeeCollectorUpdatedEvent {
+  export type InputTuple = [
+    oldCollector: AddressLike,
+    newCollector: AddressLike
+  ];
+  export type OutputTuple = [oldCollector: string, newCollector: string];
+  export interface OutputObject {
+    oldCollector: string;
+    newCollector: string;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
   export type Filter = TypedDeferredTopicFilter<Event>;
@@ -500,6 +595,19 @@ export namespace ParachainConfiguredEvent {
     parachainId: bigint;
     name: string;
     bridgeFee: bigint;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
+export namespace ProtocolFeeUpdatedEvent {
+  export type InputTuple = [oldFee: BigNumberish, newFee: BigNumberish];
+  export type OutputTuple = [oldFee: bigint, newFee: bigint];
+  export interface OutputObject {
+    oldFee: bigint;
+    newFee: bigint;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
   export type Filter = TypedDeferredTopicFilter<Event>;
@@ -599,6 +707,31 @@ export namespace SwapExecutedEvent {
   export type LogDescription = TypedLogDescription<Event>;
 }
 
+export namespace SwapLimitsUpdatedEvent {
+  export type InputTuple = [
+    oldMin: BigNumberish,
+    oldMax: BigNumberish,
+    newMin: BigNumberish,
+    newMax: BigNumberish
+  ];
+  export type OutputTuple = [
+    oldMin: bigint,
+    oldMax: bigint,
+    newMin: bigint,
+    newMax: bigint
+  ];
+  export interface OutputObject {
+    oldMin: bigint;
+    oldMax: bigint;
+    newMin: bigint;
+    newMax: bigint;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
 export namespace TokenMappedEvent {
   export type InputTuple = [
     token: AddressLike,
@@ -614,6 +747,19 @@ export namespace TokenMappedEvent {
     token: string;
     parachainId: bigint;
     assetId: string;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
+export namespace XCMExecutorUpdatedEvent {
+  export type InputTuple = [oldExecutor: AddressLike, newExecutor: AddressLike];
+  export type OutputTuple = [oldExecutor: string, newExecutor: string];
+  export interface OutputObject {
+    oldExecutor: string;
+    newExecutor: string;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
   export type Filter = TypedDeferredTopicFilter<Event>;
@@ -696,7 +842,7 @@ export interface ParachainAdapter extends BaseContract {
   >;
 
   getAmountOut: TypedContractMethod<
-    [arg0: AddressLike, arg1: AddressLike, amountIn: BigNumberish],
+    [tokenIn: AddressLike, tokenOut: AddressLike, amountIn: BigNumberish],
     [
       [bigint, bigint, bigint] & {
         amountOut: bigint;
@@ -713,6 +859,14 @@ export interface ParachainAdapter extends BaseContract {
     "view"
   >;
 
+  getBridgeCollector: TypedContractMethod<
+    [parachainId: BigNumberish],
+    [string],
+    "view"
+  >;
+
+  getFeeCollector: TypedContractMethod<[], [string], "view">;
+
   getParachainConfig: TypedContractMethod<
     [parachainId: BigNumberish],
     [ParachainAdapter.ParachainConfigStructOutput],
@@ -726,7 +880,7 @@ export interface ParachainAdapter extends BaseContract {
   >;
 
   getReserves: TypedContractMethod<
-    [arg0: AddressLike],
+    [token: AddressLike],
     [[bigint, bigint] & { reserve: bigint; lastUpdate: bigint }],
     "view"
   >;
@@ -793,7 +947,19 @@ export interface ParachainAdapter extends BaseContract {
 
   setActive: TypedContractMethod<[active: boolean], [void], "nonpayable">;
 
+  setBridgeCollector: TypedContractMethod<
+    [parachainId: BigNumberish, newCollector: AddressLike],
+    [void],
+    "nonpayable"
+  >;
+
   setFee: TypedContractMethod<[newFee: BigNumberish], [void], "nonpayable">;
+
+  setFeeCollector: TypedContractMethod<
+    [newCollector: AddressLike],
+    [void],
+    "nonpayable"
+  >;
 
   setSwapLimits: TypedContractMethod<
     [minAmount: BigNumberish, maxAmount: BigNumberish],
@@ -818,12 +984,25 @@ export interface ParachainAdapter extends BaseContract {
       tokenIn: AddressLike,
       tokenOut: AddressLike,
       amountIn: BigNumberish,
-      arg3: BigNumberish,
+      amountOutMin: BigNumberish,
       recipient: AddressLike,
       data: BytesLike
     ],
     [[bigint, bigint] & { amountOut: bigint; fee: bigint }],
     "nonpayable"
+  >;
+
+  swapExactTokensForTokensWithFee: TypedContractMethod<
+    [
+      tokenIn: AddressLike,
+      tokenOut: AddressLike,
+      amountIn: BigNumberish,
+      amountOutMin: BigNumberish,
+      recipient: AddressLike,
+      data: BytesLike
+    ],
+    [[bigint, bigint] & { amountOut: bigint; fee: bigint }],
+    "payable"
   >;
 
   unmapToken: TypedContractMethod<
@@ -889,7 +1068,7 @@ export interface ParachainAdapter extends BaseContract {
   getFunction(
     nameOrSignature: "getAmountOut"
   ): TypedContractMethod<
-    [arg0: AddressLike, arg1: AddressLike, amountIn: BigNumberish],
+    [tokenIn: AddressLike, tokenOut: AddressLike, amountIn: BigNumberish],
     [
       [bigint, bigint, bigint] & {
         amountOut: bigint;
@@ -907,6 +1086,12 @@ export interface ParachainAdapter extends BaseContract {
     "view"
   >;
   getFunction(
+    nameOrSignature: "getBridgeCollector"
+  ): TypedContractMethod<[parachainId: BigNumberish], [string], "view">;
+  getFunction(
+    nameOrSignature: "getFeeCollector"
+  ): TypedContractMethod<[], [string], "view">;
+  getFunction(
     nameOrSignature: "getParachainConfig"
   ): TypedContractMethod<
     [parachainId: BigNumberish],
@@ -919,7 +1104,7 @@ export interface ParachainAdapter extends BaseContract {
   getFunction(
     nameOrSignature: "getReserves"
   ): TypedContractMethod<
-    [arg0: AddressLike],
+    [token: AddressLike],
     [[bigint, bigint] & { reserve: bigint; lastUpdate: bigint }],
     "view"
   >;
@@ -993,8 +1178,18 @@ export interface ParachainAdapter extends BaseContract {
     nameOrSignature: "setActive"
   ): TypedContractMethod<[active: boolean], [void], "nonpayable">;
   getFunction(
+    nameOrSignature: "setBridgeCollector"
+  ): TypedContractMethod<
+    [parachainId: BigNumberish, newCollector: AddressLike],
+    [void],
+    "nonpayable"
+  >;
+  getFunction(
     nameOrSignature: "setFee"
   ): TypedContractMethod<[newFee: BigNumberish], [void], "nonpayable">;
+  getFunction(
+    nameOrSignature: "setFeeCollector"
+  ): TypedContractMethod<[newCollector: AddressLike], [void], "nonpayable">;
   getFunction(
     nameOrSignature: "setSwapLimits"
   ): TypedContractMethod<
@@ -1015,12 +1210,26 @@ export interface ParachainAdapter extends BaseContract {
       tokenIn: AddressLike,
       tokenOut: AddressLike,
       amountIn: BigNumberish,
-      arg3: BigNumberish,
+      amountOutMin: BigNumberish,
       recipient: AddressLike,
       data: BytesLike
     ],
     [[bigint, bigint] & { amountOut: bigint; fee: bigint }],
     "nonpayable"
+  >;
+  getFunction(
+    nameOrSignature: "swapExactTokensForTokensWithFee"
+  ): TypedContractMethod<
+    [
+      tokenIn: AddressLike,
+      tokenOut: AddressLike,
+      amountIn: BigNumberish,
+      amountOutMin: BigNumberish,
+      recipient: AddressLike,
+      data: BytesLike
+    ],
+    [[bigint, bigint] & { amountOut: bigint; fee: bigint }],
+    "payable"
   >;
   getFunction(
     nameOrSignature: "unmapToken"
@@ -1059,11 +1268,25 @@ export interface ParachainAdapter extends BaseContract {
     AdapterDeactivatedEvent.OutputObject
   >;
   getEvent(
+    key: "BridgeCollectorUpdated"
+  ): TypedContractEvent<
+    BridgeCollectorUpdatedEvent.InputTuple,
+    BridgeCollectorUpdatedEvent.OutputTuple,
+    BridgeCollectorUpdatedEvent.OutputObject
+  >;
+  getEvent(
     key: "BridgeExecuted"
   ): TypedContractEvent<
     BridgeExecutedEvent.InputTuple,
     BridgeExecutedEvent.OutputTuple,
     BridgeExecutedEvent.OutputObject
+  >;
+  getEvent(
+    key: "FeeCollectorUpdated"
+  ): TypedContractEvent<
+    FeeCollectorUpdatedEvent.InputTuple,
+    FeeCollectorUpdatedEvent.OutputTuple,
+    FeeCollectorUpdatedEvent.OutputObject
   >;
   getEvent(
     key: "LiquidityAdded"
@@ -1085,6 +1308,13 @@ export interface ParachainAdapter extends BaseContract {
     ParachainConfiguredEvent.InputTuple,
     ParachainConfiguredEvent.OutputTuple,
     ParachainConfiguredEvent.OutputObject
+  >;
+  getEvent(
+    key: "ProtocolFeeUpdated"
+  ): TypedContractEvent<
+    ProtocolFeeUpdatedEvent.InputTuple,
+    ProtocolFeeUpdatedEvent.OutputTuple,
+    ProtocolFeeUpdatedEvent.OutputObject
   >;
   getEvent(
     key: "RoleAdminChanged"
@@ -1115,11 +1345,25 @@ export interface ParachainAdapter extends BaseContract {
     SwapExecutedEvent.OutputObject
   >;
   getEvent(
+    key: "SwapLimitsUpdated"
+  ): TypedContractEvent<
+    SwapLimitsUpdatedEvent.InputTuple,
+    SwapLimitsUpdatedEvent.OutputTuple,
+    SwapLimitsUpdatedEvent.OutputObject
+  >;
+  getEvent(
     key: "TokenMapped"
   ): TypedContractEvent<
     TokenMappedEvent.InputTuple,
     TokenMappedEvent.OutputTuple,
     TokenMappedEvent.OutputObject
+  >;
+  getEvent(
+    key: "XCMExecutorUpdated"
+  ): TypedContractEvent<
+    XCMExecutorUpdatedEvent.InputTuple,
+    XCMExecutorUpdatedEvent.OutputTuple,
+    XCMExecutorUpdatedEvent.OutputObject
   >;
 
   filters: {
@@ -1145,6 +1389,17 @@ export interface ParachainAdapter extends BaseContract {
       AdapterDeactivatedEvent.OutputObject
     >;
 
+    "BridgeCollectorUpdated(uint32,address,address)": TypedContractEvent<
+      BridgeCollectorUpdatedEvent.InputTuple,
+      BridgeCollectorUpdatedEvent.OutputTuple,
+      BridgeCollectorUpdatedEvent.OutputObject
+    >;
+    BridgeCollectorUpdated: TypedContractEvent<
+      BridgeCollectorUpdatedEvent.InputTuple,
+      BridgeCollectorUpdatedEvent.OutputTuple,
+      BridgeCollectorUpdatedEvent.OutputObject
+    >;
+
     "BridgeExecuted(bytes32,uint32,address,uint256)": TypedContractEvent<
       BridgeExecutedEvent.InputTuple,
       BridgeExecutedEvent.OutputTuple,
@@ -1154,6 +1409,17 @@ export interface ParachainAdapter extends BaseContract {
       BridgeExecutedEvent.InputTuple,
       BridgeExecutedEvent.OutputTuple,
       BridgeExecutedEvent.OutputObject
+    >;
+
+    "FeeCollectorUpdated(address,address)": TypedContractEvent<
+      FeeCollectorUpdatedEvent.InputTuple,
+      FeeCollectorUpdatedEvent.OutputTuple,
+      FeeCollectorUpdatedEvent.OutputObject
+    >;
+    FeeCollectorUpdated: TypedContractEvent<
+      FeeCollectorUpdatedEvent.InputTuple,
+      FeeCollectorUpdatedEvent.OutputTuple,
+      FeeCollectorUpdatedEvent.OutputObject
     >;
 
     "LiquidityAdded(address,uint256,uint256)": TypedContractEvent<
@@ -1187,6 +1453,17 @@ export interface ParachainAdapter extends BaseContract {
       ParachainConfiguredEvent.InputTuple,
       ParachainConfiguredEvent.OutputTuple,
       ParachainConfiguredEvent.OutputObject
+    >;
+
+    "ProtocolFeeUpdated(uint24,uint24)": TypedContractEvent<
+      ProtocolFeeUpdatedEvent.InputTuple,
+      ProtocolFeeUpdatedEvent.OutputTuple,
+      ProtocolFeeUpdatedEvent.OutputObject
+    >;
+    ProtocolFeeUpdated: TypedContractEvent<
+      ProtocolFeeUpdatedEvent.InputTuple,
+      ProtocolFeeUpdatedEvent.OutputTuple,
+      ProtocolFeeUpdatedEvent.OutputObject
     >;
 
     "RoleAdminChanged(bytes32,bytes32,bytes32)": TypedContractEvent<
@@ -1233,6 +1510,17 @@ export interface ParachainAdapter extends BaseContract {
       SwapExecutedEvent.OutputObject
     >;
 
+    "SwapLimitsUpdated(uint256,uint256,uint256,uint256)": TypedContractEvent<
+      SwapLimitsUpdatedEvent.InputTuple,
+      SwapLimitsUpdatedEvent.OutputTuple,
+      SwapLimitsUpdatedEvent.OutputObject
+    >;
+    SwapLimitsUpdated: TypedContractEvent<
+      SwapLimitsUpdatedEvent.InputTuple,
+      SwapLimitsUpdatedEvent.OutputTuple,
+      SwapLimitsUpdatedEvent.OutputObject
+    >;
+
     "TokenMapped(address,uint32,bytes32)": TypedContractEvent<
       TokenMappedEvent.InputTuple,
       TokenMappedEvent.OutputTuple,
@@ -1242,6 +1530,17 @@ export interface ParachainAdapter extends BaseContract {
       TokenMappedEvent.InputTuple,
       TokenMappedEvent.OutputTuple,
       TokenMappedEvent.OutputObject
+    >;
+
+    "XCMExecutorUpdated(address,address)": TypedContractEvent<
+      XCMExecutorUpdatedEvent.InputTuple,
+      XCMExecutorUpdatedEvent.OutputTuple,
+      XCMExecutorUpdatedEvent.OutputObject
+    >;
+    XCMExecutorUpdated: TypedContractEvent<
+      XCMExecutorUpdatedEvent.InputTuple,
+      XCMExecutorUpdatedEvent.OutputTuple,
+      XCMExecutorUpdatedEvent.OutputObject
     >;
   };
 }

@@ -151,10 +151,12 @@ export interface DotFlowRouterInterface extends Interface {
       | "DEFAULT_ADMIN_ROLE"
       | "EMERGENCY_ROLE"
       | "LIQUIDITY_MANAGER"
+      | "MAX_PROTOCOL_FEE"
       | "ROUTER_ADMIN"
       | "addAdapter"
       | "crossChainSwap"
       | "emergencyWithdraw"
+      | "feeCollector"
       | "getActiveAdapters"
       | "getAdapterInfo"
       | "getAmountOut"
@@ -168,6 +170,7 @@ export interface DotFlowRouterInterface extends Interface {
       | "isSwapExecuted"
       | "pause"
       | "paused"
+      | "protocolFee"
       | "removeAdapter"
       | "renounceRole"
       | "revokeRole"
@@ -210,6 +213,10 @@ export interface DotFlowRouterInterface extends Interface {
     values?: undefined
   ): string;
   encodeFunctionData(
+    functionFragment: "MAX_PROTOCOL_FEE",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
     functionFragment: "ROUTER_ADMIN",
     values?: undefined
   ): string;
@@ -235,6 +242,10 @@ export interface DotFlowRouterInterface extends Interface {
   encodeFunctionData(
     functionFragment: "emergencyWithdraw",
     values: [AddressLike, AddressLike, BigNumberish]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "feeCollector",
+    values?: undefined
   ): string;
   encodeFunctionData(
     functionFragment: "getActiveAdapters",
@@ -287,6 +298,10 @@ export interface DotFlowRouterInterface extends Interface {
   ): string;
   encodeFunctionData(functionFragment: "pause", values?: undefined): string;
   encodeFunctionData(functionFragment: "paused", values?: undefined): string;
+  encodeFunctionData(
+    functionFragment: "protocolFee",
+    values?: undefined
+  ): string;
   encodeFunctionData(
     functionFragment: "removeAdapter",
     values: [AddressLike]
@@ -342,6 +357,10 @@ export interface DotFlowRouterInterface extends Interface {
     data: BytesLike
   ): Result;
   decodeFunctionResult(
+    functionFragment: "MAX_PROTOCOL_FEE",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
     functionFragment: "ROUTER_ADMIN",
     data: BytesLike
   ): Result;
@@ -352,6 +371,10 @@ export interface DotFlowRouterInterface extends Interface {
   ): Result;
   decodeFunctionResult(
     functionFragment: "emergencyWithdraw",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "feeCollector",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
@@ -394,6 +417,10 @@ export interface DotFlowRouterInterface extends Interface {
   ): Result;
   decodeFunctionResult(functionFragment: "pause", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "paused", data: BytesLike): Result;
+  decodeFunctionResult(
+    functionFragment: "protocolFee",
+    data: BytesLike
+  ): Result;
   decodeFunctionResult(
     functionFragment: "removeAdapter",
     data: BytesLike
@@ -741,6 +768,8 @@ export interface DotFlowRouter extends BaseContract {
 
   LIQUIDITY_MANAGER: TypedContractMethod<[], [string], "view">;
 
+  MAX_PROTOCOL_FEE: TypedContractMethod<[], [bigint], "view">;
+
   ROUTER_ADMIN: TypedContractMethod<[], [string], "view">;
 
   addAdapter: TypedContractMethod<[adapter: AddressLike], [void], "nonpayable">;
@@ -767,6 +796,8 @@ export interface DotFlowRouter extends BaseContract {
     [void],
     "nonpayable"
   >;
+
+  feeCollector: TypedContractMethod<[], [string], "view">;
 
   getActiveAdapters: TypedContractMethod<[], [string[]], "view">;
 
@@ -832,6 +863,8 @@ export interface DotFlowRouter extends BaseContract {
   pause: TypedContractMethod<[], [void], "nonpayable">;
 
   paused: TypedContractMethod<[], [boolean], "view">;
+
+  protocolFee: TypedContractMethod<[], [bigint], "view">;
 
   removeAdapter: TypedContractMethod<
     [adapter: AddressLike],
@@ -905,6 +938,9 @@ export interface DotFlowRouter extends BaseContract {
     nameOrSignature: "LIQUIDITY_MANAGER"
   ): TypedContractMethod<[], [string], "view">;
   getFunction(
+    nameOrSignature: "MAX_PROTOCOL_FEE"
+  ): TypedContractMethod<[], [bigint], "view">;
+  getFunction(
     nameOrSignature: "ROUTER_ADMIN"
   ): TypedContractMethod<[], [string], "view">;
   getFunction(
@@ -935,6 +971,9 @@ export interface DotFlowRouter extends BaseContract {
     [void],
     "nonpayable"
   >;
+  getFunction(
+    nameOrSignature: "feeCollector"
+  ): TypedContractMethod<[], [string], "view">;
   getFunction(
     nameOrSignature: "getActiveAdapters"
   ): TypedContractMethod<[], [string[]], "view">;
@@ -1013,6 +1052,9 @@ export interface DotFlowRouter extends BaseContract {
   getFunction(
     nameOrSignature: "paused"
   ): TypedContractMethod<[], [boolean], "view">;
+  getFunction(
+    nameOrSignature: "protocolFee"
+  ): TypedContractMethod<[], [bigint], "view">;
   getFunction(
     nameOrSignature: "removeAdapter"
   ): TypedContractMethod<[adapter: AddressLike], [void], "nonpayable">;

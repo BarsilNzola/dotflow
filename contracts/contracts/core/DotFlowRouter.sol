@@ -50,7 +50,6 @@ contract DotFlowRouter is AccessControl, ReentrancyGuard, Pausable {
         uint64 timeout;
     }
 
-    // Replace Counters.Counter with uint256
     uint256 private _swapNonces;
     mapping(bytes32 => SwapRequest) private _swapRequests;
     mapping(bytes32 => CrossChainSwapRequest) private _crossChainSwaps;
@@ -62,9 +61,9 @@ contract DotFlowRouter is AccessControl, ReentrancyGuard, Pausable {
     mapping(address => ILiquidityAdapter.AdapterInfo) private _adapterInfo;
     
     IXCM private _xcmExecutor;
-    address private _feeCollector;
-    uint24 private _protocolFee; // Basis points (10000 = 100%)
-    uint24 private constant MAX_PROTOCOL_FEE = 1000; // 10%
+    address public feeCollector;
+    uint24 public protocolFee;
+    uint24 public constant MAX_PROTOCOL_FEE = 1000; // 10%
     uint256 private constant FEE_DENOMINATOR = 10000;
 
     error InvalidPath();
@@ -131,17 +130,16 @@ contract DotFlowRouter is AccessControl, ReentrancyGuard, Pausable {
         _;
     }
 
-    constructor(address feeCollector, uint24 protocolFee) {
-        if (feeCollector == address(0)) revert ZeroAddress();
-        if (protocolFee > MAX_PROTOCOL_FEE) revert("Fee too high");
+    constructor(address feeCollector_, uint24 protocolFee_) {
+        if (feeCollector_ == address(0)) revert ZeroAddress();
+        if (protocolFee_ > MAX_PROTOCOL_FEE) revert("Fee too high");
         
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _grantRole(ROUTER_ADMIN, msg.sender);
         
-        _feeCollector = feeCollector;
-        _protocolFee = protocolFee;
+        feeCollector = feeCollector_;
+        protocolFee = protocolFee_;
         
-        // Initialize nonce to 1 (or 0, your choice)
         _swapNonces = 1;
     }
 
@@ -165,7 +163,6 @@ contract DotFlowRouter is AccessControl, ReentrancyGuard, Pausable {
         if (recipient == address(0)) revert ZeroAddress();
         if (path.isCrossChain) revert("Use crossChainSwap for cross-chain transfers");
 
-        // Use current nonce directly without .current()
         swapId = _generateSwapId(msg.sender, tokenIn, tokenOut, amountIn, _swapNonces);
         
         SwapRequest storage request = _swapRequests[swapId];
@@ -180,7 +177,6 @@ contract DotFlowRouter is AccessControl, ReentrancyGuard, Pausable {
         request.path = path;
         request.nonce = _swapNonces;
         
-        // Increment nonce manually
         _swapNonces++;
         _userSwaps[msg.sender].add(swapId);
         _userSwapCount[msg.sender][tokenIn]++;
@@ -193,11 +189,11 @@ contract DotFlowRouter is AccessControl, ReentrancyGuard, Pausable {
 
         if (amountOut < amountOutMin) revert InsufficientOutput(amountOutMin, amountOut);
 
-        uint256 fee = (amountOut * _protocolFee) / FEE_DENOMINATOR;
+        uint256 fee = (amountOut * protocolFee) / FEE_DENOMINATOR;
         uint256 amountAfterFee = amountOut - fee;
 
         if (fee > 0) {
-            IERC20(tokenOut).safeTransfer(_feeCollector, fee);
+            IERC20(tokenOut).safeTransfer(feeCollector, fee);
         }
 
         IERC20(tokenOut).safeTransfer(recipient, amountAfterFee);
@@ -234,7 +230,6 @@ contract DotFlowRouter is AccessControl, ReentrancyGuard, Pausable {
         if (!path.isCrossChain) revert("Path must be cross-chain");
         if (address(_xcmExecutor) == address(0)) revert("XCM executor not set");
 
-        // Use current nonce directly
         swapId = _generateSwapId(msg.sender, tokenIn, tokenOut, amountIn, _swapNonces);
         
         SwapRequest storage swapRequest = _swapRequests[swapId];
@@ -249,7 +244,6 @@ contract DotFlowRouter is AccessControl, ReentrancyGuard, Pausable {
         swapRequest.path = path;
         swapRequest.nonce = _swapNonces;
 
-        // Increment nonce manually
         _swapNonces++;
 
         IERC20(tokenIn).safeTransferFrom(msg.sender, address(this), amountIn);
@@ -296,9 +290,6 @@ contract DotFlowRouter is AccessControl, ReentrancyGuard, Pausable {
         return (swapId, xcmMessageId);
     }
 
-    // ... rest of the contract remains exactly the same ...
-    // (all functions below this point are unchanged)
-
     function _executeSwap(SwapRequest memory request) private returns (uint256 amountOut) {
         uint256 currentAmount = request.amountIn;
         address currentToken = request.tokenIn;
@@ -307,6 +298,11 @@ contract DotFlowRouter is AccessControl, ReentrancyGuard, Pausable {
             address adapter = request.path.adapters[i];
             address nextToken = request.path.path[i + 1];
 
+            // FIX: Reset allowance using safeDecreaseAllowance pattern
+            uint256 currentAllowance = IERC20(currentToken).allowance(address(this), adapter);
+            if (currentAllowance > 0) {
+                IERC20(currentToken).safeDecreaseAllowance(adapter, currentAllowance);
+            }
             IERC20(currentToken).safeIncreaseAllowance(adapter, currentAmount);
 
             (uint256 adapterOutput, uint256 adapterFee) = ILiquidityAdapter(adapter).swapExactTokensForTokens(
@@ -410,7 +406,7 @@ contract DotFlowRouter is AccessControl, ReentrancyGuard, Pausable {
             priceImpact += impact;
         }
 
-        uint256 protocolFeeAmount = (currentAmount * _protocolFee) / FEE_DENOMINATOR;
+        uint256 protocolFeeAmount = (currentAmount * protocolFee) / FEE_DENOMINATOR;
         amountOut = currentAmount - protocolFeeAmount;
         totalFee = cumulativeFee + protocolFeeAmount;
 
@@ -448,15 +444,15 @@ contract DotFlowRouter is AccessControl, ReentrancyGuard, Pausable {
 
     function setProtocolFee(uint24 newFee) external onlyRole(ROUTER_ADMIN) {
         if (newFee > MAX_PROTOCOL_FEE) revert("Fee too high");
-        uint24 oldFee = _protocolFee;
-        _protocolFee = newFee;
+        uint24 oldFee = protocolFee;
+        protocolFee = newFee;
         emit ProtocolFeeUpdated(oldFee, newFee);
     }
 
     function setFeeCollector(address newCollector) external onlyRole(ROUTER_ADMIN) {
         if (newCollector == address(0)) revert ZeroAddress();
-        address oldCollector = _feeCollector;
-        _feeCollector = newCollector;
+        address oldCollector = feeCollector;
+        feeCollector = newCollector;
         emit FeeCollectorUpdated(oldCollector, newCollector);
     }
 

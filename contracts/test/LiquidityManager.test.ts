@@ -1,16 +1,32 @@
 import { expect } from "chai";
 import { ethers } from "hardhat";
-import { Contract, ContractFactory } from "ethers";
-import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
-import { time } from "@nomicfoundation/hardhat-network-helpers";
+import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
+const { time } = require("@nomicfoundation/hardhat-network-helpers");
+
+// Helper functions to bypass TypeScript errors
+const getProvider = () => {
+  return (ethers as any).provider;
+};
+
+const safeIncreaseTime = async (seconds: number) => {
+  // Increase time in smaller increments to avoid overflow
+  for (let i = 0; i < seconds; i += 86400) {
+    await ethers.provider.send("evm_increaseTime", [Math.min(86400, seconds - i)]);
+    await ethers.provider.send("evm_mine", []);
+  }
+}
+
+const getSigners = async () => {
+  return await (ethers as any).getSigners();
+};
 
 describe("LiquidityManager", function () {
-  let liquidityManager: Contract;
+  let liquidityManager: any;
   let deployer: SignerWithAddress;
   let provider1: SignerWithAddress;
   let provider2: SignerWithAddress;
   let borrower: SignerWithAddress;
-  let mockToken: Contract;
+  let mockToken: any;
 
   const FEE_RATE: number = 100; // 1%
   const MIN_LIQUIDITY: bigint = ethers.parseEther("100");
@@ -18,15 +34,19 @@ describe("LiquidityManager", function () {
   const RESERVE_FACTOR: number = 1000; // 10%
 
   beforeEach(async function () {
-    [deployer, provider1, provider2, borrower] = await ethers.getSigners();
+    const signers = await getSigners();
+    deployer = signers[0];
+    provider1 = signers[1];
+    provider2 = signers[2];
+    borrower = signers[3];
 
     // Deploy mock token
-    const MockERC20: ContractFactory = await ethers.getContractFactory("MockERC20");
-    mockToken = await MockERC20.deploy("Test Token", "TEST", 18);
+    const MockERC20Factory = await ethers.getContractFactory("MockERC20");
+    mockToken = await MockERC20Factory.deploy("Test Token", "TEST", 18);
 
     // Deploy LiquidityManager
-    const LiquidityManager: ContractFactory = await ethers.getContractFactory("LiquidityManager");
-    liquidityManager = await LiquidityManager.deploy();
+    const LiquidityManagerFactory = await ethers.getContractFactory("LiquidityManager");
+    liquidityManager = await LiquidityManagerFactory.deploy();
 
     // Mint tokens
     await mockToken.mint(provider1.address, ethers.parseEther("10000"));
@@ -73,13 +93,13 @@ describe("LiquidityManager", function () {
           MIN_LIQUIDITY,
           MAX_LIQUIDITY
         )
-      ).to.be.revertedWithCustomError(liquidityManager, "PoolAlreadyExists");
+      ).to.be.revertedWithCustomError(liquidityManager,"PoolAlreadyExists");
     });
 
     it("Should not allow fee rate too high", async function () {
       const tokenAddress: string = await mockToken.getAddress();
-      const MockERC20: ContractFactory = await ethers.getContractFactory("MockERC20");
-      const newToken: Contract = await MockERC20.deploy("New", "NEW", 18);
+      const MockERC20Factory = await ethers.getContractFactory("MockERC20");
+      const newToken: any = await MockERC20Factory.deploy("New", "NEW", 18);
       
       await expect(
         liquidityManager.createPool(
@@ -92,7 +112,7 @@ describe("LiquidityManager", function () {
           MIN_LIQUIDITY,
           MAX_LIQUIDITY
         )
-      ).to.be.revertedWithCustomError(liquidityManager, "FeeRateTooHigh");
+      ).to.be.revertedWithCustomError(liquidityManager,"FeeRateTooHigh");
     });
   });
 
@@ -193,7 +213,7 @@ describe("LiquidityManager", function () {
       const shares: bigint = ethers.parseEther("500");
       
       // Advance time past lock period
-      await time.increase(24 * 3600 + 1); // 1 day + 1 second
+      await safeIncreaseTime(24 * 3600 + 1); // 1 day + 1 second
       
       await expect(
         liquidityManager.connect(provider1).removeLiquidity(
@@ -218,7 +238,7 @@ describe("LiquidityManager", function () {
           await mockToken.getAddress(),
           shares
         )
-      ).to.be.revertedWithCustomError(liquidityManager, "LockTimeNotMet");
+      ).to.be.revertedWithCustomError(liquidityManager,"LockTimeNotMet");
     });
 
     it("Should calculate fees correctly", async function () {
@@ -284,7 +304,7 @@ describe("LiquidityManager", function () {
           amount,
           borrower.address
         )
-      ).to.be.revertedWithCustomError(liquidityManager, "InsufficientLiquidity");
+      ).to.be.revertedWithCustomError(liquidityManager,"InsufficientLiquidity");
     });
 
     it("Should repay liquidity", async function () {
