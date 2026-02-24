@@ -1,0 +1,20 @@
+{
+    "name": "dotflow",
+    "version": "1.0.0",
+    "private": true,
+    "workspaces": [
+      "apps/*"
+    ],
+    "scripts": {
+      "dev:web": "npm run dev --workspace=web",
+      "dev:indexer": "npm run dev --workspace=indexer",
+      "build:web": "npm run build --workspace=web",
+      "build:indexer": "npm run build --workspace=indexer",
+      "copy-abis": "npm run copy-abis --workspace=web",
+      "db:generate": "npm run db:generate --workspace=indexer",
+      "db:migrate": "npm run db:migrate --workspace=indexer"
+    },
+    "devDependencies": {
+      "concurrently": "^9.1.2"
+    }
+}

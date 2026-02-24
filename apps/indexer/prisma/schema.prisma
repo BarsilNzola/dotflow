@@ -1,0 +1,281 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Chain {
+  id          Int      @id @default(autoincrement())
+  chainId     Int      @unique
+  name        String
+  type        ChainType // EVM or PARACHAIN
+  rpcUrl      String?
+  wsUrl       String?
+  isActive    Boolean  @default(true)
+  lastBlock   BigInt   @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  swaps       Swap[]
+  xcmMessages XCMMessage[]
+  assets      Asset[]
+}
+
+model Token {
+  id             String   @id @default(cuid())
+  address        String   // EVM address or asset ID for parachain
+  chainId        Int
+  symbol         String
+  name           String
+  decimals       Int
+  logoURI        String?
+  isNative       Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([address, chainId])
+  @@index([chainId])
+}
+
+model Swap {
+  id              String   @id @default(cuid())
+  swapId          String   @unique // bytes32 from contract
+  userAddress     String
+  tokenInAddress  String
+  tokenOutAddress String
+  amountIn        BigInt
+  amountOut       BigInt
+  amountOutMin    BigInt
+  recipient       String
+  fee             BigInt
+  protocolFee     BigInt
+  status          SwapStatus
+  txHash          String   @unique
+  blockNumber     BigInt
+  blockTimestamp  DateTime
+  chainId         Int
+  gasUsed         BigInt?
+  gasPrice        BigInt?
+  
+  tokenIn         Token?   @relation("tokenIn", fields: [tokenInAddress, chainId], references: [address, chainId])
+  tokenOut        Token?   @relation("tokenOut", fields: [tokenOutAddress, chainId], references: [address, chainId])
+  xcmMessage      XCMMessage?
+  
+  @@index([userAddress])
+  @@index([swapId])
+  @@index([txHash])
+  @@index([blockTimestamp])
+}
+
+model XCMMessage {
+  id                String        @id @default(cuid())
+  messageId         String        @unique // bytes32
+  swapId            String?       // Link to swap if applicable
+  sourceChainId     Int
+  destinationChainId Int
+  sender            String
+  recipient         String
+  assetId           String?       // Parachain asset ID
+  amount            BigInt
+  status            XCMStatus
+  weight            BigInt?
+  timeout           BigInt
+  executedAt        DateTime?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  
+  swap              Swap?         @relation(fields: [swapId], references: [swapId])
+  sourceChain       Chain         @relation("sourceChain", fields: [sourceChainId], references: [chainId])
+  destinationChain  Chain         @relation("destinationChain", fields: [destinationChainId], references: [chainId])
+  
+  @@index([messageId])
+  @@index([sender])
+  @@index([recipient])
+  @@index([status])
+}
+
+model LiquidityPool {
+  id              String   @id @default(cuid())
+  tokenAddress    String
+  chainId         Int
+  totalLiquidity  BigInt
+  availableLiquidity BigInt
+  borrowedLiquidity BigInt
+  utilizationRate Float
+  feeRate         Int      // in basis points
+  reserveFactor   BigInt
+  minLiquidity    BigInt
+  maxLiquidity    BigInt
+  isActive        Boolean  @default(true)
+  lastUpdate      DateTime @updatedAt
+  createdAt       DateTime @default(now())
+  
+  token           Token?   @relation(fields: [tokenAddress, chainId], references: [address, chainId])
+  
+  @@unique([tokenAddress, chainId])
+}
+
+model LiquidityPosition {
+  id              String   @id @default(cuid())
+  provider        String
+  tokenAddress    String
+  chainId         Int
+  shares          BigInt
+  entryTimestamp  DateTime
+  lastDeposit     DateTime
+  lastWithdraw    DateTime?
+  accruedFees     BigInt
+  pendingFees     BigInt
+  
+  pool            LiquidityPool @relation(fields: [tokenAddress, chainId], references: [tokenAddress, chainId])
+  
+  @@unique([provider, tokenAddress, chainId])
+  @@index([provider])
+}
+
+model Asset {
+  id             String   @id @default(cuid())
+  assetId        String   // Parachain asset ID (bytes32)
+  chainId        Int
+  name           String
+  symbol         String
+  decimals       Int
+  isNative       Boolean  @default(false)
+  totalSupply    BigInt?
+  metadata       Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  
+  chain          Chain    @relation(fields: [chainId], references: [chainId])
+  
+  @@unique([assetId, chainId])
+}
+
+model Adapter {
+  id              String   @id @default(cuid())
+  address         String   @unique
+  chainId         Int
+  name            String
+  type            AdapterType
+  isActive        Boolean  @default(true)
+  tvl             BigInt   @default(0)
+  fee             Int      // in basis points
+  minSwapAmount   BigInt
+  maxSwapAmount   BigInt
+  lastUpdate      DateTime @updatedAt
+  createdAt       DateTime @default(now())
+  
+  chain           Chain    @relation(fields: [chainId], references: [chainId])
+  
+  @@index([chainId])
+  @@index([type])
+}
+
+model Parachain {
+  id              String   @id @default(cuid())
+  parachainId     Int      @unique
+  name            String
+  paraId          Int      // Polkadot parachain ID
+  bridgeFee       BigInt
+  minTransfer     BigInt
+  maxTransfer     BigInt
+  timeout         BigInt
+  isActive        Boolean  @default(true)
+  lastBlock       Int?     @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  assets          Asset[]
+  xcmMessages     XCMMessage[]
+}
+
+model TokenMapping {
+  id              String   @id @default(cuid())
+  tokenAddress    String
+  parachainId     Int
+  assetId         String
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  token           Token    @relation(fields: [tokenAddress, chainId?], references: [address, chainId])
+  parachain       Parachain @relation(fields: [parachainId], references: [parachainId])
+  
+  @@unique([tokenAddress, parachainId])
+}
+
+model SyncState {
+  id              String   @id @default(cuid())
+  chainId         Int      @unique
+  lastBlock       BigInt
+  lastSync        DateTime @default(now())
+  isSyncing       Boolean  @default(false)
+  error           String?
+  
+  chain           Chain    @relation(fields: [chainId], references: [chainId])
+}
+
+enum ChainType {
+  EVM
+  PARACHAIN
+}
+
+enum SwapStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum XCMStatus {
+  PREPARED
+  EXECUTED
+  FAILED
+  CANCELLED
+  EXPIRED
+}
+
+enum AdapterType {
+  UNISWAP_V2
+  PARACHAIN
+  CUSTOM
+}
+
+model ContractEvent {
+  id              String   @id @default(cuid())
+  chainId         Int
+  contractAddress String
+  eventName       String
+  blockNumber     BigInt
+  blockHash       String
+  transactionHash String
+  logIndex        Int
+  args            Json     // Store parsed arguments
+  raw             Json     // Store raw event data
+  timestamp       DateTime @default(now())
+  
+  chain           Chain    @relation(fields: [chainId], references: [chainId])
+  
+  @@unique([chainId, transactionHash, logIndex])
+  @@index([chainId, blockNumber])
+  @@index([eventName])
+}
+
+model AdapterSync {
+  id              String   @id @default(cuid())
+  adapterAddress  String
+  chainId         Int
+  lastSync        DateTime
+  tvl             BigInt
+  fee             Int
+  minSwapAmount   BigInt
+  maxSwapAmount   BigInt
+  supportedTokens Json     // Array of token addresses
+  
+  adapter         Adapter  @relation(fields: [adapterAddress], references: [address])
+  
+  @@unique([adapterAddress, chainId])
+}
