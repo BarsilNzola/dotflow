@@ -40,7 +40,7 @@ const config: HardhatUserConfig = {
     polkadotHub: {
       url: process.env.RPC_POLKADOT_HUB || "",
       accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
-      chainId: 3000,
+      chainId: 420420417,
       gasPrice: "auto"
     },
     westend: {

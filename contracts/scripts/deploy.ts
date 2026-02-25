@@ -26,17 +26,19 @@ interface DeploymentConfig {
   uniswapFactory: string;
   supportedTokens: Record<string, string>;
   parachains: ParachainConfig[];
+  feeCollector: string;
+  liquidityProvider: string;
 }
 
 interface DeploymentInfo {
   network: string;
-  chainId: number; // Changed from number | undefined to number
+  chainId: number;
   timestamp: string;
   contracts: {
     router: string;
     liquidityManager: string;
     crossChainExecutor: string;
-    uniswapAdapter: string;
+    uniswapAdapter?: string;
     parachainAdapter: string;
   };
   config: {
@@ -44,7 +46,15 @@ interface DeploymentInfo {
     minSwapAmount: string;
     maxSwapAmount: string;
     supportedTokens: Record<string, string>;
-    parachains: ParachainConfig[];
+    parachains: {
+      id: number;
+      name: string;
+      bridgeFee: number;
+      minTransfer: string;
+      maxTransfer: string;
+      timeout: number;
+      gateway: string;
+    }[];
   };
   deployer: string;
   feeCollector: string;
@@ -52,15 +62,58 @@ interface DeploymentInfo {
 }
 
 async function main(): Promise<void> {
-  console.log("\n Starting DotFlow deployment...\n");
+  console.log("\nStarting DotFlow deployment...\n");
 
-  const [deployer, feeCollector, liquidityProvider]: SignerWithAddress[] = await ethers.getSigners();
+  // Step 1: Test network connectivity
+  console.log("[1] Testing network connectivity...");
+  try {
+    const network = await ethers.provider.getNetwork();
+    console.log(`  - Connected to network: ${network.name} (Chain ID: ${network.chainId})`);
+  } catch (error: any) {
+    console.error(`  - Network connection failed: ${error.message}`);
+    process.exit(1);
+  }
+
+  // Step 2: Get deployer signer
+  console.log("\n[2] Getting deployer signer...");
+  let deployer: SignerWithAddress;
   
-  console.log(` Deployer address: ${deployer.address}`);
-  console.log(` Fee collector address: ${feeCollector.address}`);
-  console.log(` Liquidity provider address: ${liquidityProvider.address}\n`);
+  try {
+    const signers = await ethers.getSigners();
+    console.log(`  - Retrieved ${signers.length} signers`);
+    
+    if (signers.length < 1) {
+      throw new Error("No signers available");
+    }
+    
+    deployer = signers[0];
+    console.log(`  - Deployer: ${deployer.address}`);
+  } catch (error: any) {
+    console.error(`  - Failed to get signer: ${error.message}`);
+    process.exit(1);
+  }
+
+  // Step 3: Check deployer balance
+  console.log("\n[3] Checking deployer balance...");
+  try {
+    const balance = await ethers.provider.getBalance(deployer.address);
+    console.log(`  - Deployer balance: ${ethers.formatEther(balance)} ETH`);
+    
+    if (balance === 0n) {
+      console.error("  - ERROR: Deployer has zero balance - need funds for gas");
+      process.exit(1);
+    }
+  } catch (error: any) {
+    console.error(`  - Failed to check balance: ${error.message}`);
+    process.exit(1);
+  }
 
   // Configuration
+  console.log("\n[4] Loading configuration...");
+  
+  const feeCollectorAddress = deployer.address;
+  const liquidityProviderAddress = deployer.address;
+  
   const config: DeploymentConfig = {
     protocolFee: 30,
     minSwapAmount: ethers.parseEther("0.01"),
@@ -80,7 +133,7 @@ async function main(): Promise<void> {
     },
     parachains: [
       {
-        id: 3000,
+        id: 420420417,
         name: "Polkadot Hub",
         bridgeFee: 10,
         minTransfer: ethers.parseEther("1"),
@@ -97,234 +150,354 @@ async function main(): Promise<void> {
         timeout: 3600,
         gateway: "0x0000000000000000000000000000000000000801"
       }
-    ]
+    ],
+    feeCollector: feeCollectorAddress,
+    liquidityProvider: liquidityProviderAddress
   };
+  
+  console.log("  - Configuration loaded");
+  console.log(`  - Fee Collector: ${config.feeCollector}`);
+  console.log(`  - Liquidity Provider: ${config.liquidityProvider}`);
+
+  const network = await ethers.provider.getNetwork();
+  console.log(`\n[5] Target network: ${network.name} (Chain ID: ${network.chainId})`);
 
   // Deploy CrossChainExecutor
-  console.log(" Deploying CrossChainExecutor...");
-  const crossChainExecutor = await ethers.deployContract("CrossChainExecutor");
-  await crossChainExecutor.waitForDeployment();
-  const crossChainExecutorAddress: string = await crossChainExecutor.getAddress();
-  console.log(` CrossChainExecutor deployed to: ${crossChainExecutorAddress}`);
-
-  // Deploy LiquidityManager
-  console.log("\n Deploying LiquidityManager...");
-  const liquidityManager = await ethers.deployContract("LiquidityManager");
-  await liquidityManager.waitForDeployment();
-  const liquidityManagerAddress: string = await liquidityManager.getAddress();
-  console.log(` LiquidityManager deployed to: ${liquidityManagerAddress}`);
-
-  // Deploy DotFlowRouter
-  console.log("\n Deploying DotFlowRouter...");
-  const router = await ethers.deployContract("DotFlowRouter", [feeCollector.address, config.protocolFee]);
-  await router.waitForDeployment();
-  const routerAddress: string = await router.getAddress();
-  console.log(` DotFlowRouter deployed to: ${routerAddress}`);
-
-  // Configure router
-  console.log("\n Configuring DotFlowRouter...");
-  await router.setXCMExecutor(crossChainExecutorAddress);
-  console.log(" XCM Executor set");
-
-  // Deploy UniswapV2Adapter
-  console.log("\n Deploying UniswapV2Adapter...");
-  const uniswapAdapter = await ethers.deployContract("UniswapV2Adapter", [
-    "Uniswap V2 Adapter",
-    config.uniswapRouter,
-    config.adapterFee,
-    config.minSwapAmount,
-    config.maxSwapAmount,
-    feeCollector.address
-  ]);
-  await uniswapAdapter.waitForDeployment();
-  const uniswapAdapterAddress: string = await uniswapAdapter.getAddress();
-  console.log(` UniswapV2Adapter deployed to: ${uniswapAdapterAddress}`);
-
-  // Deploy ParachainAdapter
-  console.log("\n Deploying ParachainAdapter...");
-  const parachainAdapter = await ethers.deployContract("ParachainAdapter", [
-    "Parachain Adapter",
-    crossChainExecutorAddress,
-    config.adapterFee,
-    config.minSwapAmount,
-    config.maxSwapAmount
-  ]);
-  await parachainAdapter.waitForDeployment();
-  const parachainAdapterAddress: string = await parachainAdapter.getAddress();
-  console.log(` ParachainAdapter deployed to: ${parachainAdapterAddress}`);
-
-  // Configure parachains
-  console.log("\n Configuring Parachains...");
-  for (const parachain of config.parachains) {
-    await parachainAdapter.configureParachain(
-      parachain.id,
-      parachain.name,
-      parachain.bridgeFee,
-      parachain.minTransfer,
-      parachain.maxTransfer,
-      parachain.timeout
-    );
-    console.log(` Configured parachain: ${parachain.name} (ID: ${parachain.id})`);
+  console.log("\n[6] Deploying CrossChainExecutor...");
+  let crossChainExecutor: any;
+  let crossChainExecutorAddress: string;
+  
+  try {
+    const factory = await ethers.getContractFactory("CrossChainExecutor");
+    crossChainExecutor = await factory.connect(deployer).deploy();
+    await crossChainExecutor.waitForDeployment();
+    crossChainExecutorAddress = await crossChainExecutor.getAddress();
+    console.log(`  - CrossChainExecutor deployed to: ${crossChainExecutorAddress}`);
+  } catch (error: any) {
+    console.error(`  - CrossChainExecutor deployment failed: ${error.message}`);
+    process.exit(1);
   }
 
-  // Initialize Uniswap pairs
-  console.log("\n Initializing Uniswap pairs...");
-  const tokens: string[] = Object.values(config.supportedTokens);
-  for (let i = 0; i < tokens.length; i++) {
-    for (let j = i + 1; j < tokens.length; j++) {
-      try {
-        await uniswapAdapter.initializePair(tokens[i], tokens[j]);
-        console.log(` Initialized pair: ${tokens[i].slice(0, 6)}... - ${tokens[j].slice(0, 6)}...`);
-      } catch (error) {
-        console.log(`  Pair already exists or failed: ${tokens[i].slice(0, 6)}... - ${tokens[j].slice(0, 6)}...`);
-      }
+  // Deploy LiquidityManager
+  console.log("\n[7] Deploying LiquidityManager...");
+  let liquidityManager: any;
+  let liquidityManagerAddress: string;
+  
+  try {
+    const factory = await ethers.getContractFactory("LiquidityManager");
+    liquidityManager = await factory.connect(deployer).deploy();
+    await liquidityManager.waitForDeployment();
+    liquidityManagerAddress = await liquidityManager.getAddress();
+    console.log(`  - LiquidityManager deployed to: ${liquidityManagerAddress}`);
+  } catch (error: any) {
+    console.error(`  - LiquidityManager deployment failed: ${error.message}`);
+    process.exit(1);
+  }
+
+  // Deploy DotFlowRouter
+  console.log("\n[8] Deploying DotFlowRouter...");
+  let router: any;
+  let routerAddress: string;
+  
+  try {
+    const factory = await ethers.getContractFactory("DotFlowRouter");
+    router = await factory.connect(deployer).deploy(config.feeCollector, config.protocolFee);
+    await router.waitForDeployment();
+    routerAddress = await router.getAddress();
+    console.log(`  - DotFlowRouter deployed to: ${routerAddress}`);
+  } catch (error: any) {
+    console.error(`  - DotFlowRouter deployment failed: ${error.message}`);
+    process.exit(1);
+  }
+
+  // Configure router
+  console.log("\n[9] Configuring DotFlowRouter...");
+  try {
+    const tx = await router.connect(deployer).setXCMExecutor(crossChainExecutorAddress);
+    await tx.wait();
+    console.log("  - XCM Executor set");
+  } catch (error: any) {
+    console.error(`  - Failed to set XCM Executor: ${error.message}`);
+    process.exit(1);
+  }
+
+  // Deploy UniswapV2Adapter
+  console.log("\n[10] Deploying UniswapV2Adapter...");
+  let uniswapAdapter: any;
+  let uniswapAdapterAddress: string | undefined;
+
+  try {
+    const factory = await ethers.getContractFactory("UniswapV2Adapter");
+    console.log("  - Factory obtained");
+    
+    uniswapAdapter = await factory.connect(deployer).deploy(
+      "Uniswap V2 Adapter",
+      config.uniswapRouter,
+      config.adapterFee,
+      config.minSwapAmount,
+      config.maxSwapAmount,
+      config.feeCollector
+    );
+    
+    console.log(`  - Transaction hash: ${uniswapAdapter.deploymentTransaction()?.hash}`);
+    console.log("  - Waiting for deployment confirmation...");
+    
+    await uniswapAdapter.waitForDeployment();
+    uniswapAdapterAddress = await uniswapAdapter.getAddress();
+    console.log(`  - UniswapV2Adapter deployed to: ${uniswapAdapterAddress}`);
+  } catch (error: any) {
+    console.error(`  - UniswapV2Adapter deployment failed: ${error.message}`);
+    console.log("  - Continuing without UniswapV2Adapter...");
+    uniswapAdapterAddress = undefined;
+  }
+
+  // Deploy ParachainAdapter
+  console.log("\n[11] Deploying ParachainAdapter...");
+  let parachainAdapter: any;
+  let parachainAdapterAddress: string;
+  
+  try {
+    const factory = await ethers.getContractFactory("ParachainAdapter");
+    parachainAdapter = await factory.connect(deployer).deploy(
+      "Parachain Adapter",
+      crossChainExecutorAddress,
+      config.adapterFee,
+      config.minSwapAmount,
+      config.maxSwapAmount
+    );
+    await parachainAdapter.waitForDeployment();
+    parachainAdapterAddress = await parachainAdapter.getAddress();
+    console.log(`  - ParachainAdapter deployed to: ${parachainAdapterAddress}`);
+  } catch (error: any) {
+    console.error(`  - ParachainAdapter deployment failed: ${error.message}`);
+    process.exit(1);
+  }
+
+  // Add adapters to router
+  console.log("\n[12] Adding adapters to router...");
+  
+  // Add ParachainAdapter
+  try {
+    const tx = await router.connect(deployer).addAdapter(parachainAdapterAddress);
+    await tx.wait();
+    console.log("  - ParachainAdapter added to router");
+  } catch (error: any) {
+    console.error(`  - Failed to add ParachainAdapter: ${error.message}`);
+    process.exit(1);
+  }
+  
+  // Add UniswapV2Adapter if deployed
+  if (uniswapAdapterAddress) {
+    try {
+      const tx = await router.connect(deployer).addAdapter(uniswapAdapterAddress);
+      await tx.wait();
+      console.log("  - UniswapV2Adapter added to router");
+    } catch (error: any) {
+      console.error(`  - Failed to add UniswapV2Adapter: ${error.message}`);
+    }
+  }
+
+  // Configure parachains
+  console.log("\n[13] Configuring parachains...");
+  for (let i = 0; i < config.parachains.length; i++) {
+    const parachain = config.parachains[i];
+    try {
+      console.log(`  - Configuring ${parachain.name} (ID: ${parachain.id})...`);
+      const tx = await parachainAdapter.connect(deployer).configureParachain(
+        parachain.id,
+        parachain.name,
+        parachain.bridgeFee,
+        parachain.minTransfer,
+        parachain.maxTransfer,
+        parachain.timeout
+      );
+      await tx.wait();
+      console.log(`    - Configured`);
+    } catch (error: any) {
+      console.error(`    - Failed: ${error.message}`);
     }
   }
 
   // Map tokens to parachains
-  console.log("\n Mapping tokens to parachains...");
+  console.log("\n[14] Mapping tokens to parachains...");
   for (const parachain of config.parachains) {
     for (const [symbol, tokenAddress] of Object.entries(config.supportedTokens)) {
-      const assetId: string = ethers.zeroPadBytes(ethers.toBeHex(tokenAddress), 32);
-      const isNative: boolean = symbol === "WETH" && parachain.id === 3000;
-      
-      await parachainAdapter.mapToken(
-        tokenAddress,
-        parachain.id,
-        assetId,
-        18,
-        config.minSwapAmount,
-        config.maxSwapAmount,
-        isNative
-      );
-      console.log(` Mapped ${symbol} to ${parachain.name}`);
+      try {
+        console.log(`  - Mapping ${symbol} to ${parachain.name}...`);
+        
+        const assetId: string = ethers.zeroPadValue(ethers.toBeHex(tokenAddress), 32);
+        const isNative: boolean = symbol === "WETH" && parachain.id === 3000;
+        
+        const tx = await parachainAdapter.connect(deployer).mapToken(
+          tokenAddress,
+          parachain.id,
+          assetId,
+          18,
+          parachain.minTransfer,
+          parachain.maxTransfer,
+          isNative
+        );
+        await tx.wait();
+        console.log(`    - Mapped ${symbol} to ${parachain.name}`);
+      } catch (error: any) {
+        console.log(`    - Failed to map ${symbol}: ${error.message}`);
+      }
     }
   }
 
-  // Add adapters to router - FIX 1: Cast to any to bypass type checking
-  console.log("\n Adding adapters to router...");
-  await (router as any).addAdapter(uniswapAdapterAddress, "Uniswap V2");
-  console.log(" Added UniswapV2Adapter");
-  
-  await (router as any).addAdapter(parachainAdapterAddress, "Parachain");
-  console.log(" Added ParachainAdapter");
+  // Initialize Uniswap pairs if adapter deployed
+  if (uniswapAdapterAddress && uniswapAdapter) {
+    console.log("\n[15] Initializing Uniswap pairs...");
+    const tokens: string[] = Object.values(config.supportedTokens);
+    for (let i = 0; i < tokens.length; i++) {
+      for (let j = i + 1; j < tokens.length; j++) {
+        try {
+          console.log(`  - Initializing pair: ${tokens[i].slice(0, 6)}... - ${tokens[j].slice(0, 6)}...`);
+          const tx = await uniswapAdapter.connect(deployer).initializePair(tokens[i], tokens[j]);
+          await tx.wait();
+          console.log(`    - Initialized`);
+        } catch (error: any) {
+          console.log(`    - Pair initialization failed: ${error.message}`);
+        }
+      }
+    }
+  }
 
   // Grant roles
-  console.log("\n Granting roles...");
-  
-  // Grant LIQUIDITY_PROVIDER role - FIX 2: Remove LIQUIDITY_PROVIDER if it doesn't exist
-  // Check if these roles exist first
-  try {
-    const uniswapLiquidityProviderRole: string = await (uniswapAdapter as any).LIQUIDITY_PROVIDER();
-    await uniswapAdapter.grantRole(uniswapLiquidityProviderRole, liquidityProvider.address);
-    console.log(" Granted LIQUIDITY_PROVIDER role to UniswapAdapter");
-  } catch (error) {
-    console.log(" LIQUIDITY_PROVIDER role not found in UniswapAdapter");
-  }
+  console.log("\n[16] Granting roles...");
   
   try {
-    const parachainLiquidityProviderRole: string = await (parachainAdapter as any).LIQUIDITY_PROVIDER();
-    await parachainAdapter.grantRole(parachainLiquidityProviderRole, liquidityProvider.address);
-    console.log(" Granted LIQUIDITY_PROVIDER role to ParachainAdapter");
-  } catch (error) {
-    console.log(" LIQUIDITY_PROVIDER role not found in ParachainAdapter");
+    const bridgeOperatorRole: string = await parachainAdapter.BRIDGE_OPERATOR();
+    const tx = await parachainAdapter.connect(deployer).grantRole(bridgeOperatorRole, config.liquidityProvider);
+    await tx.wait();
+    console.log("  - Granted BRIDGE_OPERATOR role");
+  } catch (error: any) {
+    console.log(`  - BRIDGE_OPERATOR role not granted: ${error.message}`);
   }
 
-  // Grant EXECUTOR_ROLE to router in CrossChainExecutor
-  const executorRole: string = await crossChainExecutor.EXECUTOR_ROLE();
-  await crossChainExecutor.grantRole(executorRole, routerAddress);
-  console.log(" Granted EXECUTOR_ROLE to router");
-
-  // Grant RELAYER_ROLE to deployer
-  const relayerRole: string = await crossChainExecutor.RELAYER_ROLE();
-  await crossChainExecutor.grantRole(relayerRole, deployer.address);
-  console.log(" Granted RELAYER_ROLE to deployer");
-
-  // Grant FEE_MANAGER role
   try {
-    const feeManagerRole: string = await (uniswapAdapter as any).FEE_MANAGER();
-    await uniswapAdapter.grantRole(feeManagerRole, feeCollector.address);
-    console.log(" Granted FEE_MANAGER role");
-  } catch (error) {
-    console.log(" FEE_MANAGER role not found");
+    const executorRole: string = await crossChainExecutor.EXECUTOR_ROLE();
+    const tx = await crossChainExecutor.connect(deployer).grantRole(executorRole, routerAddress);
+    await tx.wait();
+    console.log("  - Granted EXECUTOR_ROLE");
+  } catch (error: any) {
+    console.error(`  - Failed to grant EXECUTOR_ROLE: ${error.message}`);
   }
 
-  // Create liquidity pools in LiquidityManager
-  console.log("\n🔧 Creating liquidity pools...");
+  try {
+    const relayerRole: string = await crossChainExecutor.RELAYER_ROLE();
+    const tx = await crossChainExecutor.connect(deployer).grantRole(relayerRole, deployer.address);
+    await tx.wait();
+    console.log("  - Granted RELAYER_ROLE");
+  } catch (error: any) {
+    console.error(`  - Failed to grant RELAYER_ROLE: ${error.message}`);
+  }
+
+  // Grant LIQUIDITY_PROVIDER role on UniswapAdapter if deployed
+  if (uniswapAdapterAddress && uniswapAdapter) {
+    try {
+      const liquidityProviderRole: string = await uniswapAdapter.LIQUIDITY_PROVIDER();
+      const tx = await uniswapAdapter.connect(deployer).grantRole(liquidityProviderRole, config.liquidityProvider);
+      await tx.wait();
+      console.log("  - Granted LIQUIDITY_PROVIDER role on UniswapAdapter");
+    } catch (error: any) {
+      console.log(`  - LIQUIDITY_PROVIDER role not granted: ${error.message}`);
+    }
+  }
+
+  // Create liquidity pools
+  console.log("\n[17] Creating liquidity pools...");
   for (const [symbol, tokenAddress] of Object.entries(config.supportedTokens)) {
-    await liquidityManager.createPool(
-      tokenAddress,
-      `${symbol} Liquidity Pool`,
-      `lp${symbol}`,
-      0,
-      config.adapterFee,
-      config.reserveFactor,
-      config.minLiquidity,
-      config.maxLiquidity
-    );
-    console.log(` Created liquidity pool for ${symbol}`);
+    try {
+      console.log(`  - Creating pool for ${symbol}...`);
+      const tx = await liquidityManager.connect(deployer).createPool(
+        tokenAddress,
+        `${symbol} Liquidity Pool`,
+        `lp${symbol}`,
+        0,
+        config.adapterFee,
+        config.reserveFactor,
+        config.minLiquidity,
+        config.maxLiquidity
+      );
+      await tx.wait();
+      console.log(`    - Created pool for ${symbol}`);
+    } catch (error: any) {
+      console.log(`    - Failed to create pool for ${symbol}: ${error.message}`);
+    }
   }
 
-  console.log("\n Deployment Summary:");
-  console.log("=====================");
+  // Deployment Summary
+  console.log("\n" + "=".repeat(50));
+  console.log("DEPLOYMENT SUMMARY");
+  console.log("=".repeat(50));
   console.log(`Router: ${routerAddress}`);
   console.log(`LiquidityManager: ${liquidityManagerAddress}`);
   console.log(`CrossChainExecutor: ${crossChainExecutorAddress}`);
-  console.log(`UniswapAdapter: ${uniswapAdapterAddress}`);
+  console.log(`UniswapAdapter: ${uniswapAdapterAddress || "Not deployed"}`);
   console.log(`ParachainAdapter: ${parachainAdapterAddress}`);
-  console.log(`Fee Collector: ${feeCollector.address}`);
-  console.log(`Protocol Fee: ${config.protocolFee} basis points`);
-  console.log(`Min Swap: ${ethers.formatEther(config.minSwapAmount)}`);
-  console.log(`Max Swap: ${ethers.formatEther(config.maxSwapAmount)}`);
+  console.log(`Deployer: ${deployer.address}`);
+  console.log(`Fee Collector: ${config.feeCollector}`);
+  console.log(`Liquidity Provider: ${config.liquidityProvider}`);
+  console.log("=".repeat(50));
 
-  // Get network info - FIX 3: Convert bigint to number
-  const network = await ethers.provider.getNetwork();
-  const chainId = Number(network.chainId); // Convert bigint to number
+  // Save deployment info
+  console.log("\n[18] Saving deployment info...");
+  try {
+    const deploymentInfo: DeploymentInfo = {
+      network: network.name,
+      chainId: Number(network.chainId),
+      timestamp: new Date().toISOString(),
+      contracts: {
+        router: routerAddress,
+        liquidityManager: liquidityManagerAddress,
+        crossChainExecutor: crossChainExecutorAddress,
+        uniswapAdapter: uniswapAdapterAddress,
+        parachainAdapter: parachainAdapterAddress
+      },
+      config: {
+        protocolFee: config.protocolFee,
+        minSwapAmount: config.minSwapAmount.toString(),
+        maxSwapAmount: config.maxSwapAmount.toString(),
+        supportedTokens: config.supportedTokens,
+        parachains: config.parachains.map(p => ({
+          id: p.id,
+          name: p.name,
+          bridgeFee: p.bridgeFee,
+          minTransfer: p.minTransfer.toString(),
+          maxTransfer: p.maxTransfer.toString(),
+          timeout: p.timeout,
+          gateway: p.gateway
+        }))
+      },
+      deployer: deployer.address,
+      feeCollector: config.feeCollector,
+      liquidityProvider: config.liquidityProvider
+    };
 
-  // Write deployment info to file
-  const deploymentInfo: DeploymentInfo = {
-    network: network.name,
-    chainId: chainId, // Now it's a number
-    timestamp: new Date().toISOString(),
-    contracts: {
-      router: routerAddress,
-      liquidityManager: liquidityManagerAddress,
-      crossChainExecutor: crossChainExecutorAddress,
-      uniswapAdapter: uniswapAdapterAddress,
-      parachainAdapter: parachainAdapterAddress
-    },
-    config: {
-      protocolFee: config.protocolFee,
-      minSwapAmount: config.minSwapAmount.toString(),
-      maxSwapAmount: config.maxSwapAmount.toString(),
-      supportedTokens: config.supportedTokens,
-      parachains: config.parachains
-    },
-    deployer: deployer.address,
-    feeCollector: feeCollector.address,
-    liquidityProvider: liquidityProvider.address
-  };
+    const deploymentPath: string = path.join(__dirname, `../deployments/deployment-${network.name}-${Date.now()}.json`);
+    
+    const deploymentsDir: string = path.join(__dirname, "../deployments");
+    if (!fs.existsSync(deploymentsDir)) {
+      fs.mkdirSync(deploymentsDir, { recursive: true });
+    }
 
-  const deploymentPath: string = path.join(__dirname, `../deployments/deployment-${network.name}-${Date.now()}.json`);
-  
-  // Ensure deployments directory exists
-  const deploymentsDir: string = path.join(__dirname, "../deployments");
-  if (!fs.existsSync(deploymentsDir)) {
-    fs.mkdirSync(deploymentsDir, { recursive: true });
+    fs.writeFileSync(
+      deploymentPath,
+      JSON.stringify(deploymentInfo, null, 2)
+    );
+
+    console.log(`  - Deployment info saved to: ${deploymentPath}`);
+  } catch (error: any) {
+    console.error(`  - Failed to save deployment info: ${error.message}`);
   }
 
-  fs.writeFileSync(
-    deploymentPath,
-    JSON.stringify(deploymentInfo, null, 2)
-  );
-
-  console.log("\n Deployment completed successfully!");
-  console.log(` Deployment info saved to: ${deploymentPath}\n`);
+  console.log("\nDeployment completed successfully!\n");
 }
 
 main()
   .then(() => process.exit(0))
   .catch((error: Error) => {
-    console.error("\n Deployment failed:", error);
+    console.error("\nDeployment failed:", error);
     process.exit(1);
   });

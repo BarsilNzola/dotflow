@@ -1,11 +1,11 @@
 export const CONTRACT_ADDRESSES = {
     // Polkadot Hub
-    3000: {
-      dotFlowRouter: '0x...', // Your deployed router address
-      liquidityManager: '0x...', // Your deployed liquidity manager
-      crossChainExecutor: '0x...', // Your deployed XCM executor
-      uniswapV2Adapter: '0x...', // Your deployed Uniswap adapter
-      parachainAdapter: '0x...', // Your deployed parachain adapter
+    420420417: {
+      dotFlowRouter: '0x685D11df23C6F631dfe4a231F84c64d3D5204b6C',
+      liquidityManager: '0xB996c3c94bE5e1edA58c10eF561ee3163A8eE5b8',
+      crossChainExecutor: '0xeDAA51c9d8aEf7f79FD705d88218f05b7D771F96',
+      uniswapV2Adapter: '0x04459298b8cc115F5DB81231C191e6837671b6c6',
+      parachainAdapter: '0xe8Aff4d9F267D3c3B36708599f9fE113bd4cC56E',
     }
   } as const
   
