@@ -1,40 +1,20 @@
 import { type Chain } from 'viem'
-import { 
-  mainnet, 
-  polygon, 
-  arbitrum, 
-  optimism, 
-  base,
-  bsc
-} from 'wagmi/chains'
 
-export const SUPPORTED_CHAINS = [
-  mainnet,
-  polygon,
-  arbitrum,
-  optimism,
-  base,
-  bsc
-] as const
-
-export type SupportedChain = typeof SUPPORTED_CHAINS[number]
-
-export const chains = SUPPORTED_CHAINS
-
-export const CHAIN_NAMES: Record<number, string> = {
-  1: 'Ethereum',
-  137: 'Polygon',
-  42161: 'Arbitrum',
-  10: 'Optimism',
-  8453: 'Base',
-  56: 'BNB Chain'
+export const POLKADOT_HUB: Chain = {
+  id: 3000, // Replace with actual Polkadot Hub chain ID
+  name: 'Polkadot Hub',
+  nativeCurrency: {
+    decimals: 10,
+    name: 'DOT',
+    symbol: 'DOT',
+  },
+  rpcUrls: {
+    default: { http: ['https://rpc.polkadot-hub.com'] },
+    public: { http: ['https://rpc.polkadot-hub.com'] },
+  },
+  blockExplorers: {
+    default: { name: 'Explorer', url: 'https://explorer.polkadot-hub.com' },
+  },
 }
 
-export const CHAIN_NATIVE_TOKENS: Record<number, { symbol: string; name: string; decimals: number }> = {
-  1: { symbol: 'ETH', name: 'Ether', decimals: 18 },
-  137: { symbol: 'MATIC', name: 'Matic', decimals: 18 },
-  42161: { symbol: 'ETH', name: 'Ether', decimals: 18 },
-  10: { symbol: 'ETH', name: 'Ether', decimals: 18 },
-  8453: { symbol: 'ETH', name: 'Ether', decimals: 18 },
-  56: { symbol: 'BNB', name: 'Binance Coin', decimals: 18 }
-}
+export const SUPPORTED_CHAINS = [POLKADOT_HUB] as const

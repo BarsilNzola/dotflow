@@ -1,51 +1,11 @@
 export const CONTRACT_ADDRESSES = {
-    // Mainnet
-    1: {
-      dotFlowRouter: '0x...' as `0x${string}`,
-      liquidityManager: '0x...' as `0x${string}`,
-      crossChainExecutor: '0x...' as `0x${string}`,
-      uniswapV2Adapter: '0x...' as `0x${string}`,
-      parachainAdapter: '0x...' as `0x${string}`
-    },
-    // Polygon
-    137: {
-      dotFlowRouter: '0x...' as `0x${string}`,
-      liquidityManager: '0x...' as `0x${string}`,
-      crossChainExecutor: '0x...' as `0x${string}`,
-      uniswapV2Adapter: '0x...' as `0x${string}`,
-      parachainAdapter: '0x...' as `0x${string}`
-    },
-    // Arbitrum
-    42161: {
-      dotFlowRouter: '0x...' as `0x${string}`,
-      liquidityManager: '0x...' as `0x${string}`,
-      crossChainExecutor: '0x...' as `0x${string}`,
-      uniswapV2Adapter: '0x...' as `0x${string}`,
-      parachainAdapter: '0x...' as `0x${string}`
-    },
-    // Optimism
-    10: {
-      dotFlowRouter: '0x...' as `0x${string}`,
-      liquidityManager: '0x...' as `0x${string}`,
-      crossChainExecutor: '0x...' as `0x${string}`,
-      uniswapV2Adapter: '0x...' as `0x${string}`,
-      parachainAdapter: '0x...' as `0x${string}`
-    },
-    // Base
-    8453: {
-      dotFlowRouter: '0x...' as `0x${string}`,
-      liquidityManager: '0x...' as `0x${string}`,
-      crossChainExecutor: '0x...' as `0x${string}`,
-      uniswapV2Adapter: '0x...' as `0x${string}`,
-      parachainAdapter: '0x...' as `0x${string}`
-    },
-    // BSC
-    56: {
-      dotFlowRouter: '0x...' as `0x${string}`,
-      liquidityManager: '0x...' as `0x${string}`,
-      crossChainExecutor: '0x...' as `0x${string}`,
-      uniswapV2Adapter: '0x...' as `0x${string}`,
-      parachainAdapter: '0x...' as `0x${string}`
+    // Polkadot Hub
+    3000: {
+      dotFlowRouter: '0x...', // Your deployed router address
+      liquidityManager: '0x...', // Your deployed liquidity manager
+      crossChainExecutor: '0x...', // Your deployed XCM executor
+      uniswapV2Adapter: '0x...', // Your deployed Uniswap adapter
+      parachainAdapter: '0x...', // Your deployed parachain adapter
     }
   } as const
   
