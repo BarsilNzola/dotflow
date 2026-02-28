@@ -72,6 +72,7 @@ export interface UniswapV2AdapterInterface extends Interface {
       | "getAdapterInfo"
       | "getAmountOut"
       | "getAmountsIn"
+      | "getFactory"
       | "getFee"
       | "getPairInfo"
       | "getReserves"
@@ -90,6 +91,7 @@ export interface UniswapV2AdapterInterface extends Interface {
       | "renounceRole"
       | "revokeRole"
       | "setActive"
+      | "setFactory"
       | "setFee"
       | "setFeeCollector"
       | "setSwapLimits"
@@ -170,6 +172,10 @@ export interface UniswapV2AdapterInterface extends Interface {
     functionFragment: "getAmountsIn",
     values: [BigNumberish, AddressLike, AddressLike]
   ): string;
+  encodeFunctionData(
+    functionFragment: "getFactory",
+    values?: undefined
+  ): string;
   encodeFunctionData(functionFragment: "getFee", values?: undefined): string;
   encodeFunctionData(
     functionFragment: "getPairInfo",
@@ -237,6 +243,10 @@ export interface UniswapV2AdapterInterface extends Interface {
     values: [BytesLike, AddressLike]
   ): string;
   encodeFunctionData(functionFragment: "setActive", values: [boolean]): string;
+  encodeFunctionData(
+    functionFragment: "setFactory",
+    values: [AddressLike]
+  ): string;
   encodeFunctionData(
     functionFragment: "setFee",
     values: [BigNumberish]
@@ -323,6 +333,7 @@ export interface UniswapV2AdapterInterface extends Interface {
     functionFragment: "getAmountsIn",
     data: BytesLike
   ): Result;
+  decodeFunctionResult(functionFragment: "getFactory", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "getFee", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "getPairInfo",
@@ -371,6 +382,7 @@ export interface UniswapV2AdapterInterface extends Interface {
   ): Result;
   decodeFunctionResult(functionFragment: "revokeRole", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "setActive", data: BytesLike): Result;
+  decodeFunctionResult(functionFragment: "setFactory", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "setFee", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "setFeeCollector",
@@ -751,6 +763,8 @@ export interface UniswapV2Adapter extends BaseContract {
     "view"
   >;
 
+  getFactory: TypedContractMethod<[], [string], "view">;
+
   getFee: TypedContractMethod<[], [bigint], "view">;
 
   getPairInfo: TypedContractMethod<
@@ -845,6 +859,12 @@ export interface UniswapV2Adapter extends BaseContract {
   >;
 
   setActive: TypedContractMethod<[active: boolean], [void], "nonpayable">;
+
+  setFactory: TypedContractMethod<
+    [factory_: AddressLike],
+    [void],
+    "nonpayable"
+  >;
 
   setFee: TypedContractMethod<[newFee: BigNumberish], [void], "nonpayable">;
 
@@ -981,6 +1001,9 @@ export interface UniswapV2Adapter extends BaseContract {
     "view"
   >;
   getFunction(
+    nameOrSignature: "getFactory"
+  ): TypedContractMethod<[], [string], "view">;
+  getFunction(
     nameOrSignature: "getFee"
   ): TypedContractMethod<[], [bigint], "view">;
   getFunction(
@@ -1089,6 +1112,9 @@ export interface UniswapV2Adapter extends BaseContract {
   getFunction(
     nameOrSignature: "setActive"
   ): TypedContractMethod<[active: boolean], [void], "nonpayable">;
+  getFunction(
+    nameOrSignature: "setFactory"
+  ): TypedContractMethod<[factory_: AddressLike], [void], "nonpayable">;
   getFunction(
     nameOrSignature: "setFee"
   ): TypedContractMethod<[newFee: BigNumberish], [void], "nonpayable">;

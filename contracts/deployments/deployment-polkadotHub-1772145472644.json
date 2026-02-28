@@ -1,0 +1,48 @@
+{
+  "network": "polkadotHub",
+  "chainId": 420420417,
+  "timestamp": "2026-02-26T22:37:52.644Z",
+  "contracts": {
+    "router": "0x92176165e344D86e32Ef9D3A48D8169eaeCe82D1",
+    "liquidityManager": "0x9D345D6De8868C65CfB9B05B8bd0a82DC8A46F83",
+    "crossChainExecutor": "0x5b34AEE28c342713A94520a4B85Dc8ec88DEcb0D",
+    "uniswapAdapter": "0x0f8FF887d3Ab35c488c3BD8334B4fdCC1B2d400c",
+    "parachainAdapter": "0x28fcc75576f720d6E797541E9D1faD51321ad4EC",
+    "tokens": {
+      "usdc": "0x5a5306B699d21c9d6a16A792b266215d550cc338",
+      "wdot": "0xE32Abcaa249aB85bC995377E6DDd96f283343B28"
+    }
+  },
+  "config": {
+    "protocolFee": 30,
+    "minSwapAmount": "10000000000000000",
+    "maxSwapAmount": "10000000000000000000000",
+    "supportedTokens": {
+      "USDC": "0x5a5306B699d21c9d6a16A792b266215d550cc338",
+      "WDOT": "0xE32Abcaa249aB85bC995377E6DDd96f283343B28"
+    },
+    "parachains": [
+      {
+        "id": 420420417,
+        "name": "Polkadot Hub",
+        "bridgeFee": 10,
+        "minTransfer": "1000000",
+        "maxTransfer": "10000000000",
+        "timeout": 7200,
+        "gateway": "0x0000000000000000000000000000000000000800"
+      },
+      {
+        "id": 420,
+        "name": "Westend",
+        "bridgeFee": 5,
+        "minTransfer": "100000",
+        "maxTransfer": "5000000000",
+        "timeout": 3600,
+        "gateway": "0x0000000000000000000000000000000000000801"
+      }
+    ]
+  },
+  "deployer": "0x8a4F565EB4af450C88958333bD95fDb140c0f5CE",
+  "feeCollector": "0x8a4F565EB4af450C88958333bD95fDb140c0f5CE",
+  "liquidityProvider": "0x8a4F565EB4af450C88958333bD95fDb140c0f5CE"
+}

@@ -3,6 +3,10 @@ import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
 import * as fs from "fs";
 import * as path from "path";
 
+// ===========================================
+// INTERFACES
+// ===========================================
+
 interface ParachainConfig {
   id: number;
   name: string;
@@ -28,6 +32,10 @@ interface DeploymentConfig {
   parachains: ParachainConfig[];
   feeCollector: string;
   liquidityProvider: string;
+  initialLiquidity: {
+    usdc: bigint;
+    wdot: bigint;
+  };
 }
 
 interface DeploymentInfo {
@@ -40,6 +48,10 @@ interface DeploymentInfo {
     crossChainExecutor: string;
     uniswapAdapter?: string;
     parachainAdapter: string;
+    tokens: {
+      usdc: string;
+      wdot: string;
+    };
   };
   config: {
     protocolFee: number;
@@ -61,8 +73,12 @@ interface DeploymentInfo {
   liquidityProvider: string;
 }
 
+// ===========================================
+// MAIN DEPLOYMENT FUNCTION
+// ===========================================
+
 async function main(): Promise<void> {
-  console.log("\nStarting DotFlow deployment...\n");
+  console.log("\nStarting DotFlow deployment with MockERC20 tokens...\n");
 
   // Step 1: Test network connectivity
   console.log("[1] Testing network connectivity...");
@@ -97,7 +113,7 @@ async function main(): Promise<void> {
   console.log("\n[3] Checking deployer balance...");
   try {
     const balance = await ethers.provider.getBalance(deployer.address);
-    console.log(`  - Deployer balance: ${ethers.formatEther(balance)} ETH`);
+    console.log(`  - Deployer balance: ${ethers.formatEther(balance)} PAS`);
     
     if (balance === 0n) {
       console.error("  - ERROR: Deployer has zero balance - need funds for gas");
@@ -108,36 +124,54 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  // Configuration
-  console.log("\n[4] Loading configuration...");
+  // Load deployed token addresses
+  console.log("\n[4] Loading MockERC20 token addresses...");
+  let usdcAddress: string;
+  let wdotAddress: string;
+  
+  try {
+    const deployedTokens = JSON.parse(
+      fs.readFileSync(path.join(__dirname, "../deployed-tokens.json"), "utf-8")
+    );
+    usdcAddress = deployedTokens.usdc;
+    wdotAddress = deployedTokens.wdot;
+    console.log(`  - USDC: ${usdcAddress}`);
+    console.log(`  - WDOT: ${wdotAddress}`);
+  } catch (error: any) {
+    console.error(`  - Failed to load token addresses: ${error.message}`);
+    console.log("  - Make sure you've run deploy-tokens.ts first");
+    process.exit(1);
+  }
+
+  // Configuration with actual deployed tokens and Uniswap addresses
+  console.log("\n[5] Loading configuration...");
   
   const feeCollectorAddress = deployer.address;
   const liquidityProviderAddress = deployer.address;
   
   const config: DeploymentConfig = {
     protocolFee: 30,
-    minSwapAmount: ethers.parseEther("0.01"),
-    maxSwapAmount: ethers.parseEther("1000"),
+    minSwapAmount: ethers.parseUnits("0.01", 18),
+    maxSwapAmount: ethers.parseUnits("10000", 18),
     adapterFee: 25,
     xcmTimeout: 3600,
-    minLiquidity: ethers.parseEther("100"),
-    maxLiquidity: ethers.parseEther("1000000"),
+    minLiquidity: ethers.parseUnits("100", 18),
+    maxLiquidity: ethers.parseUnits("1000000", 18),
     reserveFactor: 1000,
-    uniswapRouter: "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D",
-    uniswapFactory: "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f",
+    // Real Uniswap V2 addresses deployed on Polkadot Hub
+    uniswapRouter: "0x4288D462626ba3e7761A9aF2A7281f1f6F949Afb",
+    uniswapFactory: "0xb2CA69fda5644aCd262EA526181C529882121c9d",
     supportedTokens: {
-      WETH: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
-      USDC: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
-      DAI: "0x6B175474E89094C44Da98b954EedeAC495271d0F",
-      USDT: "0xdAC17F958D2ee523a2206206994597C13D831ec7"
+      USDC: usdcAddress,
+      WDOT: wdotAddress,
     },
     parachains: [
       {
         id: 420420417,
         name: "Polkadot Hub",
         bridgeFee: 10,
-        minTransfer: ethers.parseEther("1"),
-        maxTransfer: ethers.parseEther("10000"),
+        minTransfer: ethers.parseUnits("1", 6),
+        maxTransfer: ethers.parseUnits("10000", 6),
         timeout: 7200,
         gateway: "0x0000000000000000000000000000000000000800"
       },
@@ -145,25 +179,38 @@ async function main(): Promise<void> {
         id: 420,
         name: "Westend",
         bridgeFee: 5,
-        minTransfer: ethers.parseEther("0.1"),
-        maxTransfer: ethers.parseEther("5000"),
+        minTransfer: ethers.parseUnits("0.1", 6),
+        maxTransfer: ethers.parseUnits("5000", 6),
         timeout: 3600,
         gateway: "0x0000000000000000000000000000000000000801"
       }
     ],
     feeCollector: feeCollectorAddress,
-    liquidityProvider: liquidityProviderAddress
+    liquidityProvider: liquidityProviderAddress,
+    initialLiquidity: {
+      usdc: ethers.parseUnits("5000", 6),
+      wdot: ethers.parseUnits("500", 10),
+    }
   };
   
   console.log("  - Configuration loaded");
   console.log(`  - Fee Collector: ${config.feeCollector}`);
   console.log(`  - Liquidity Provider: ${config.liquidityProvider}`);
+  console.log(`  - Supported tokens: ${Object.keys(config.supportedTokens).join(", ")}`);
+  console.log(`  - Uniswap Router: ${config.uniswapRouter}`);
+  console.log(`  - Uniswap Factory: ${config.uniswapFactory}`);
 
   const network = await ethers.provider.getNetwork();
-  console.log(`\n[5] Target network: ${network.name} (Chain ID: ${network.chainId})`);
+  console.log(`\n[6] Target network: ${network.name} (Chain ID: ${network.chainId})`);
+
+  // Get token contract instances
+  console.log("\n[7] Getting token contract instances...");
+  const usdcToken = await ethers.getContractAt("MockERC20", usdcAddress);
+  const wdotToken = await ethers.getContractAt("MockERC20", wdotAddress);
+  console.log("  - Token contracts loaded");
 
   // Deploy CrossChainExecutor
-  console.log("\n[6] Deploying CrossChainExecutor...");
+  console.log("\n[8] Deploying CrossChainExecutor...");
   let crossChainExecutor: any;
   let crossChainExecutorAddress: string;
   
@@ -179,7 +226,7 @@ async function main(): Promise<void> {
   }
 
   // Deploy LiquidityManager
-  console.log("\n[7] Deploying LiquidityManager...");
+  console.log("\n[9] Deploying LiquidityManager...");
   let liquidityManager: any;
   let liquidityManagerAddress: string;
   
@@ -195,7 +242,7 @@ async function main(): Promise<void> {
   }
 
   // Deploy DotFlowRouter
-  console.log("\n[8] Deploying DotFlowRouter...");
+  console.log("\n[10] Deploying DotFlowRouter...");
   let router: any;
   let routerAddress: string;
   
@@ -211,7 +258,7 @@ async function main(): Promise<void> {
   }
 
   // Configure router
-  console.log("\n[9] Configuring DotFlowRouter...");
+  console.log("\n[11] Configuring DotFlowRouter...");
   try {
     const tx = await router.connect(deployer).setXCMExecutor(crossChainExecutorAddress);
     await tx.wait();
@@ -221,18 +268,20 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  // Deploy UniswapV2Adapter
-  console.log("\n[10] Deploying UniswapV2Adapter...");
+  // Deploy UniswapV2Adapter with explicit factory address
+  console.log("\n[12] Deploying UniswapV2Adapter...");
   let uniswapAdapter: any;
   let uniswapAdapterAddress: string | undefined;
 
   try {
     const factory = await ethers.getContractFactory("UniswapV2Adapter");
-    console.log("  - Factory obtained");
+    console.log(`  - Using Uniswap Router: ${config.uniswapRouter}`);
+    console.log(`  - Using Uniswap Factory: ${config.uniswapFactory}`);
     
     uniswapAdapter = await factory.connect(deployer).deploy(
       "Uniswap V2 Adapter",
       config.uniswapRouter,
+      config.uniswapFactory,
       config.adapterFee,
       config.minSwapAmount,
       config.maxSwapAmount,
@@ -245,6 +294,11 @@ async function main(): Promise<void> {
     await uniswapAdapter.waitForDeployment();
     uniswapAdapterAddress = await uniswapAdapter.getAddress();
     console.log(`  - UniswapV2Adapter deployed to: ${uniswapAdapterAddress}`);
+    
+    // Verify factory was set correctly
+    const currentFactory = await uniswapAdapter.getFactory();
+    console.log(`  - Factory verified: ${currentFactory}`);
+    
   } catch (error: any) {
     console.error(`  - UniswapV2Adapter deployment failed: ${error.message}`);
     console.log("  - Continuing without UniswapV2Adapter...");
@@ -252,7 +306,7 @@ async function main(): Promise<void> {
   }
 
   // Deploy ParachainAdapter
-  console.log("\n[11] Deploying ParachainAdapter...");
+  console.log("\n[13] Deploying ParachainAdapter...");
   let parachainAdapter: any;
   let parachainAdapterAddress: string;
   
@@ -274,7 +328,7 @@ async function main(): Promise<void> {
   }
 
   // Add adapters to router
-  console.log("\n[12] Adding adapters to router...");
+  console.log("\n[14] Adding adapters to router...");
   
   // Add ParachainAdapter
   try {
@@ -298,7 +352,7 @@ async function main(): Promise<void> {
   }
 
   // Configure parachains
-  console.log("\n[13] Configuring parachains...");
+  console.log("\n[15] Configuring parachains...");
   for (let i = 0; i < config.parachains.length; i++) {
     const parachain = config.parachains[i];
     try {
@@ -319,20 +373,21 @@ async function main(): Promise<void> {
   }
 
   // Map tokens to parachains
-  console.log("\n[14] Mapping tokens to parachains...");
+  console.log("\n[16] Mapping tokens to parachains...");
   for (const parachain of config.parachains) {
     for (const [symbol, tokenAddress] of Object.entries(config.supportedTokens)) {
       try {
         console.log(`  - Mapping ${symbol} to ${parachain.name}...`);
         
         const assetId: string = ethers.zeroPadValue(ethers.toBeHex(tokenAddress), 32);
-        const isNative: boolean = symbol === "WETH" && parachain.id === 3000;
+        const decimals = symbol === "USDC" ? 6 : 10;
+        const isNative: boolean = false;
         
         const tx = await parachainAdapter.connect(deployer).mapToken(
           tokenAddress,
           parachain.id,
           assetId,
-          18,
+          decimals,
           parachain.minTransfer,
           parachain.maxTransfer,
           isNative
@@ -347,7 +402,7 @@ async function main(): Promise<void> {
 
   // Initialize Uniswap pairs if adapter deployed
   if (uniswapAdapterAddress && uniswapAdapter) {
-    console.log("\n[15] Initializing Uniswap pairs...");
+    console.log("\n[17] Initializing Uniswap pairs...");
     const tokens: string[] = Object.values(config.supportedTokens);
     for (let i = 0; i < tokens.length; i++) {
       for (let j = i + 1; j < tokens.length; j++) {
@@ -357,14 +412,18 @@ async function main(): Promise<void> {
           await tx.wait();
           console.log(`    - Initialized`);
         } catch (error: any) {
-          console.log(`    - Pair initialization failed: ${error.message}`);
+          if (error.message.includes("Pair already supported")) {
+            console.log(`    - Pair already exists, continuing...`);
+          } else {
+            console.log(`    - Pair initialization failed: ${error.message}`);
+          }
         }
       }
     }
   }
 
   // Grant roles
-  console.log("\n[16] Granting roles...");
+  console.log("\n[18] Granting roles...");
   
   try {
     const bridgeOperatorRole: string = await parachainAdapter.BRIDGE_OPERATOR();
@@ -393,7 +452,6 @@ async function main(): Promise<void> {
     console.error(`  - Failed to grant RELAYER_ROLE: ${error.message}`);
   }
 
-  // Grant LIQUIDITY_PROVIDER role on UniswapAdapter if deployed
   if (uniswapAdapterAddress && uniswapAdapter) {
     try {
       const liquidityProviderRole: string = await uniswapAdapter.LIQUIDITY_PROVIDER();
@@ -406,10 +464,11 @@ async function main(): Promise<void> {
   }
 
   // Create liquidity pools
-  console.log("\n[17] Creating liquidity pools...");
+  console.log("\n[19] Creating liquidity pools...");
   for (const [symbol, tokenAddress] of Object.entries(config.supportedTokens)) {
     try {
       console.log(`  - Creating pool for ${symbol}...`);
+      const decimals = symbol === "USDC" ? 6 : 10;
       const tx = await liquidityManager.connect(deployer).createPool(
         tokenAddress,
         `${symbol} Liquidity Pool`,
@@ -417,8 +476,8 @@ async function main(): Promise<void> {
         0,
         config.adapterFee,
         config.reserveFactor,
-        config.minLiquidity,
-        config.maxLiquidity
+        ethers.parseUnits("100", decimals),
+        ethers.parseUnits("1000000", decimals)
       );
       await tx.wait();
       console.log(`    - Created pool for ${symbol}`);
@@ -427,7 +486,117 @@ async function main(): Promise<void> {
     }
   }
 
-  // Deployment Summary
+  // ===========================================
+  // FIXED: Add initial liquidity using direct pair minting
+  // ===========================================
+  if (uniswapAdapterAddress && uniswapAdapter) {
+    console.log("\n[20] Adding initial liquidity to Uniswap...");
+    
+    try {
+      const usdcBalance = await usdcToken.balanceOf(deployer.address);
+      const wdotBalance = await wdotToken.balanceOf(deployer.address);
+      
+      console.log(`  - USDC Balance: ${ethers.formatUnits(usdcBalance, 6)} USDC`);
+      console.log(`  - WDOT Balance: ${ethers.formatUnits(wdotBalance, 10)} WDOT`);
+      
+      if (usdcBalance < config.initialLiquidity.usdc) {
+        throw new Error(`Insufficient USDC balance. Have: ${ethers.formatUnits(usdcBalance, 6)}, Need: ${ethers.formatUnits(config.initialLiquidity.usdc, 6)}`);
+      }
+      if (wdotBalance < config.initialLiquidity.wdot) {
+        throw new Error(`Insufficient WDOT balance. Have: ${ethers.formatUnits(wdotBalance, 10)}, Need: ${ethers.formatUnits(config.initialLiquidity.wdot, 10)}`);
+      }
+      
+      // Get factory
+      console.log("  - Getting factory...");
+      const factory = await ethers.getContractAt("IUniswapV2Factory", config.uniswapFactory);
+      
+      // Check if pair exists
+      let pairAddress = await factory.getPair(usdcAddress, wdotAddress);
+      console.log(`  - Pair address: ${pairAddress}`);
+      
+      if (pairAddress === "0x0000000000000000000000000000000000000000") {
+        console.log("  - Creating pair...");
+        const createTx = await factory.createPair(usdcAddress, wdotAddress);
+        await createTx.wait();
+        pairAddress = await factory.getPair(usdcAddress, wdotAddress);
+        console.log(`    - Pair created at: ${pairAddress}`);
+      }
+      
+      // Get pair contract with full ABI
+      const pairAbi = [
+        "function getReserves() external view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast)",
+        "function mint(address to) external returns (uint liquidity)",
+        "function token0() external view returns (address)",
+        "function token1() external view returns (address)",
+        "function balanceOf(address owner) external view returns (uint)",
+        "function totalSupply() external view returns (uint)"
+      ];
+      
+      const pair = new ethers.Contract(pairAddress, pairAbi, deployer);
+      
+      // Check current pair balances
+      const usdcInPair = await usdcToken.balanceOf(pairAddress);
+      const wdotInPair = await wdotToken.balanceOf(pairAddress);
+      console.log(`  - Current USDC in pair: ${ethers.formatUnits(usdcInPair, 6)}`);
+      console.log(`  - Current WDOT in pair: ${ethers.formatUnits(wdotInPair, 10)}`);
+
+      // Transfer tokens directly to the pair
+      console.log("  - Transferring USDC to pair...");
+      let tx = await usdcToken.connect(deployer).transfer(pairAddress, config.initialLiquidity.usdc);
+      await tx.wait();
+      
+      console.log("  - Transferring WDOT to pair...");
+      tx = await wdotToken.connect(deployer).transfer(pairAddress, config.initialLiquidity.wdot);
+      await tx.wait();
+      
+      // Check new pair balances
+      const newUsdcInPair = await usdcToken.balanceOf(pairAddress);
+      const newWdotInPair = await wdotToken.balanceOf(pairAddress);
+      console.log(`  - After transfer - USDC in pair: ${ethers.formatUnits(newUsdcInPair, 6)}`);
+      console.log(`  - After transfer - WDOT in pair: ${ethers.formatUnits(newWdotInPair, 10)}`);
+      
+      // Get token order
+      const token0 = await pair.token0();
+      const token1 = await pair.token1();
+      console.log(`  - Token0: ${token0}`);
+      console.log(`  - Token1: ${token1}`);
+      
+      // Check reserves before mint
+      const reservesBefore = await pair.getReserves();
+      console.log(`  - Reserves before mint: ${reservesBefore[0]} / ${reservesBefore[1]}`);
+      
+      // Mint LP tokens
+      console.log("  - Minting LP tokens...");
+      const mintTx = await pair.mint(deployer.address);
+      await mintTx.wait();
+      console.log(`    - ✅ LP tokens minted! (tx: ${mintTx.hash})`);
+      
+      // Check new reserves
+      const reservesAfter = await pair.getReserves();
+      console.log(`  - Reserves after mint: ${reservesAfter[0]} / ${reservesAfter[1]}`);
+      
+      // Check LP tokens received
+      const lpBalance = await pair.balanceOf(deployer.address);
+      console.log(`  - LP tokens received: ${ethers.formatEther(lpBalance)}`);
+      
+      // Sync the adapter
+      console.log("  - Syncing Uniswap adapter...");
+      await uniswapAdapter.syncPair(usdcAddress, wdotAddress);
+      
+      // Verify the pair in adapter
+      const finalPairInfo = await uniswapAdapter.getPairInfo(usdcAddress, wdotAddress);
+      console.log(`  - Final adapter pair check:`);
+      console.log(`    - Pair address: ${finalPairInfo[0]}`);
+      console.log(`    - Reserve0: ${finalPairInfo[1]}`);
+      console.log(`    - Reserve1: ${finalPairInfo[2]}`);
+      console.log(`    - Liquidity: ${finalPairInfo[4]}`);
+      
+    } catch (error: any) {
+      console.error(`  - ❌ Failed to add initial liquidity: ${error.message}`);
+      if (error.data) console.error(`  - Error data: ${error.data}`);
+    }
+  }
+
   console.log("\n" + "=".repeat(50));
   console.log("DEPLOYMENT SUMMARY");
   console.log("=".repeat(50));
@@ -436,13 +605,15 @@ async function main(): Promise<void> {
   console.log(`CrossChainExecutor: ${crossChainExecutorAddress}`);
   console.log(`UniswapAdapter: ${uniswapAdapterAddress || "Not deployed"}`);
   console.log(`ParachainAdapter: ${parachainAdapterAddress}`);
+  console.log(`Tokens:`);
+  console.log(`  - USDC: ${usdcAddress}`);
+  console.log(`  - WDOT: ${wdotAddress}`);
   console.log(`Deployer: ${deployer.address}`);
   console.log(`Fee Collector: ${config.feeCollector}`);
   console.log(`Liquidity Provider: ${config.liquidityProvider}`);
   console.log("=".repeat(50));
 
-  // Save deployment info
-  console.log("\n[18] Saving deployment info...");
+  console.log("\n[21] Saving deployment info...");
   try {
     const deploymentInfo: DeploymentInfo = {
       network: network.name,
@@ -453,7 +624,11 @@ async function main(): Promise<void> {
         liquidityManager: liquidityManagerAddress,
         crossChainExecutor: crossChainExecutorAddress,
         uniswapAdapter: uniswapAdapterAddress,
-        parachainAdapter: parachainAdapterAddress
+        parachainAdapter: parachainAdapterAddress,
+        tokens: {
+          usdc: usdcAddress,
+          wdot: wdotAddress
+        }
       },
       config: {
         protocolFee: config.protocolFee,
@@ -488,6 +663,26 @@ async function main(): Promise<void> {
     );
 
     console.log(`  - Deployment info saved to: ${deploymentPath}`);
+    
+    const frontendConfig = {
+      chainId: Number(network.chainId),
+      router: routerAddress,
+      liquidityManager: liquidityManagerAddress,
+      crossChainExecutor: crossChainExecutorAddress,
+      uniswapAdapter: uniswapAdapterAddress,
+      parachainAdapter: parachainAdapterAddress,
+      tokens: {
+        USDC: usdcAddress,
+        WDOT: wdotAddress
+      }
+    };
+    
+    fs.writeFileSync(
+      path.join(__dirname, "../../apps/web/src/contracts/deployed-config.json"),
+      JSON.stringify(frontendConfig, null, 2)
+    );
+    console.log("  - Frontend config saved to apps/web/src/contracts/deployed-config.json");
+    
   } catch (error: any) {
     console.error(`  - Failed to save deployment info: ${error.message}`);
   }

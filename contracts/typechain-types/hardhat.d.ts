@@ -137,22 +137,6 @@ declare module "hardhat/types/runtime" {
       name: "MockERC20",
       signerOrOptions?: ethers.Signer | FactoryOptions
     ): Promise<Contracts.MockERC20__factory>;
-    getContractFactory(
-      name: "IUniswapV2Factory",
-      signerOrOptions?: ethers.Signer | FactoryOptions
-    ): Promise<Contracts.IUniswapV2Factory__factory>;
-    getContractFactory(
-      name: "MockUniswapV2Factory",
-      signerOrOptions?: ethers.Signer | FactoryOptions
-    ): Promise<Contracts.MockUniswapV2Factory__factory>;
-    getContractFactory(
-      name: "MockUniswapV2Pair",
-      signerOrOptions?: ethers.Signer | FactoryOptions
-    ): Promise<Contracts.MockUniswapV2Pair__factory>;
-    getContractFactory(
-      name: "MockUniswapV2Router",
-      signerOrOptions?: ethers.Signer | FactoryOptions
-    ): Promise<Contracts.MockUniswapV2Router__factory>;
 
     getContractAt(
       name: "AccessControl",
@@ -309,26 +293,6 @@ declare module "hardhat/types/runtime" {
       address: string | ethers.Addressable,
       signer?: ethers.Signer
     ): Promise<Contracts.MockERC20>;
-    getContractAt(
-      name: "IUniswapV2Factory",
-      address: string | ethers.Addressable,
-      signer?: ethers.Signer
-    ): Promise<Contracts.IUniswapV2Factory>;
-    getContractAt(
-      name: "MockUniswapV2Factory",
-      address: string | ethers.Addressable,
-      signer?: ethers.Signer
-    ): Promise<Contracts.MockUniswapV2Factory>;
-    getContractAt(
-      name: "MockUniswapV2Pair",
-      address: string | ethers.Addressable,
-      signer?: ethers.Signer
-    ): Promise<Contracts.MockUniswapV2Pair>;
-    getContractAt(
-      name: "MockUniswapV2Router",
-      address: string | ethers.Addressable,
-      signer?: ethers.Signer
-    ): Promise<Contracts.MockUniswapV2Router>;
 
     deployContract(
       name: "AccessControl",
@@ -454,22 +418,6 @@ declare module "hardhat/types/runtime" {
       name: "MockERC20",
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.MockERC20>;
-    deployContract(
-      name: "IUniswapV2Factory",
-      signerOrOptions?: ethers.Signer | DeployContractOptions
-    ): Promise<Contracts.IUniswapV2Factory>;
-    deployContract(
-      name: "MockUniswapV2Factory",
-      signerOrOptions?: ethers.Signer | DeployContractOptions
-    ): Promise<Contracts.MockUniswapV2Factory>;
-    deployContract(
-      name: "MockUniswapV2Pair",
-      signerOrOptions?: ethers.Signer | DeployContractOptions
-    ): Promise<Contracts.MockUniswapV2Pair>;
-    deployContract(
-      name: "MockUniswapV2Router",
-      signerOrOptions?: ethers.Signer | DeployContractOptions
-    ): Promise<Contracts.MockUniswapV2Router>;
 
     deployContract(
       name: "AccessControl",
@@ -626,26 +574,6 @@ declare module "hardhat/types/runtime" {
       args: any[],
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.MockERC20>;
-    deployContract(
-      name: "IUniswapV2Factory",
-      args: any[],
-      signerOrOptions?: ethers.Signer | DeployContractOptions
-    ): Promise<Contracts.IUniswapV2Factory>;
-    deployContract(
-      name: "MockUniswapV2Factory",
-      args: any[],
-      signerOrOptions?: ethers.Signer | DeployContractOptions
-    ): Promise<Contracts.MockUniswapV2Factory>;
-    deployContract(
-      name: "MockUniswapV2Pair",
-      args: any[],
-      signerOrOptions?: ethers.Signer | DeployContractOptions
-    ): Promise<Contracts.MockUniswapV2Pair>;
-    deployContract(
-      name: "MockUniswapV2Router",
-      args: any[],
-      signerOrOptions?: ethers.Signer | DeployContractOptions
-    ): Promise<Contracts.MockUniswapV2Router>;
 
     // default types
     getContractFactory(

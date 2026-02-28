@@ -124,17 +124,20 @@ contract UniswapV2Adapter is ILiquidityAdapter, AccessControl, ReentrancyGuard {
     constructor(
         string memory name_,
         address router_,
+        address factory_,
         uint24 fee_,
         uint256 minSwapAmount_,
         uint256 maxSwapAmount_,
         address feeCollector_
     ) {
         require(router_ != address(0), "Invalid router address");
+        require(factory_ != address(0), "Invalid factory address");
         require(feeCollector_ != address(0), "Invalid fee collector");
         require(fee_ <= MAX_FEE_PERCENT, "Fee too high");
         
         _name = name_;
         _router = router_;
+        _factory = factory_;
         
         // Try to get factory and WETH addresses
         (bool successFactory, bytes memory factoryData) = router_.staticcall(
@@ -160,6 +163,15 @@ contract UniswapV2Adapter is ILiquidityAdapter, AccessControl, ReentrancyGuard {
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _grantRole(ADAPTER_ADMIN, msg.sender);
         _grantRole(FEE_MANAGER, msg.sender);
+    }
+
+    function setFactory(address factory_) external onlyRole(ADAPTER_ADMIN) {
+        require(factory_ != address(0), "Invalid factory address");
+        _factory = factory_;
+    }
+
+    function getFactory() external view returns (address) {
+        return _factory;
     }
 
     function swapExactTokensForTokens(
@@ -417,10 +429,14 @@ contract UniswapV2Adapter is ILiquidityAdapter, AccessControl, ReentrancyGuard {
                 try IUniswapV2Factory(_factory).createPair(tokenA, tokenB) returns (address newPair) {
                     pair = newPair;
                 } catch {
-                    // Creation failed
+                    revert("Failed to create pair");
                 }
             }
+        } else {
+            revert("Factory not set");
         }
+
+        require(pair != address(0), "Pair creation failed");
 
         _supportedPairs[tokenA][tokenB] = true;
         _supportedPairs[tokenB][tokenA] = true;
@@ -433,17 +449,15 @@ contract UniswapV2Adapter is ILiquidityAdapter, AccessControl, ReentrancyGuard {
         uint32 blockTimestampLast = uint32(block.timestamp);
         uint256 totalSupply = 0;
 
-        if (pair != address(0)) {
-            try IUniswapV2Pair(pair).getReserves() returns (uint112 r0, uint112 r1, uint32 ts) {
-                reserve0 = r0;
-                reserve1 = r1;
-                blockTimestampLast = ts;
-            } catch {}
-            
-            try IUniswapV2Pair(pair).totalSupply() returns (uint256 supply) {
-                totalSupply = supply;
-            } catch {}
-        }
+        try IUniswapV2Pair(pair).getReserves() returns (uint112 r0, uint112 r1, uint32 ts) {
+            reserve0 = r0;
+            reserve1 = r1;
+            blockTimestampLast = ts;
+        } catch {}
+        
+        try IUniswapV2Pair(pair).totalSupply() returns (uint256 supply) {
+            totalSupply = supply;
+        } catch {}
         
         _pairInfo[tokenA][tokenB] = PairInfo({
             pair: pair,
