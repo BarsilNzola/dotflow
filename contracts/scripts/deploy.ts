@@ -486,114 +486,55 @@ async function main(): Promise<void> {
     }
   }
 
-  // ===========================================
-  // FIXED: Add initial liquidity using direct pair minting
-  // ===========================================
   if (uniswapAdapterAddress && uniswapAdapter) {
-    console.log("\n[20] Adding initial liquidity to Uniswap...");
-    
+    console.log("\n[20] Adding initial liquidity via direct pair mint...");
+  
     try {
       const usdcBalance = await usdcToken.balanceOf(deployer.address);
       const wdotBalance = await wdotToken.balanceOf(deployer.address);
-      
-      console.log(`  - USDC Balance: ${ethers.formatUnits(usdcBalance, 6)} USDC`);
-      console.log(`  - WDOT Balance: ${ethers.formatUnits(wdotBalance, 10)} WDOT`);
-      
-      if (usdcBalance < config.initialLiquidity.usdc) {
-        throw new Error(`Insufficient USDC balance. Have: ${ethers.formatUnits(usdcBalance, 6)}, Need: ${ethers.formatUnits(config.initialLiquidity.usdc, 6)}`);
-      }
-      if (wdotBalance < config.initialLiquidity.wdot) {
-        throw new Error(`Insufficient WDOT balance. Have: ${ethers.formatUnits(wdotBalance, 10)}, Need: ${ethers.formatUnits(config.initialLiquidity.wdot, 10)}`);
-      }
-      
-      // Get factory
-      console.log("  - Getting factory...");
+      console.log(`  - USDC Balance: ${ethers.formatUnits(usdcBalance, 6)}`);
+      console.log(`  - WDOT Balance: ${ethers.formatUnits(wdotBalance, 10)}`);
+  
+      // Get pair address from factory
       const factory = await ethers.getContractAt("IUniswapV2Factory", config.uniswapFactory);
-      
-      // Check if pair exists
       let pairAddress = await factory.getPair(usdcAddress, wdotAddress);
-      console.log(`  - Pair address: ${pairAddress}`);
-      
-      if (pairAddress === "0x0000000000000000000000000000000000000000") {
+  
+      if (pairAddress === ethers.ZeroAddress) {
         console.log("  - Creating pair...");
-        const createTx = await factory.createPair(usdcAddress, wdotAddress);
-        await createTx.wait();
+        const tx = await factory.createPair(usdcAddress, wdotAddress);
+        await tx.wait();
         pairAddress = await factory.getPair(usdcAddress, wdotAddress);
-        console.log(`    - Pair created at: ${pairAddress}`);
+        console.log(`  - Pair created at: ${pairAddress}`);
+      } else {
+        console.log(`  - Pair exists: ${pairAddress}`);
       }
-      
-      // Get pair contract with full ABI
-      const pairAbi = [
-        "function getReserves() external view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast)",
-        "function mint(address to) external returns (uint liquidity)",
-        "function token0() external view returns (address)",
-        "function token1() external view returns (address)",
-        "function balanceOf(address owner) external view returns (uint)",
-        "function totalSupply() external view returns (uint)"
-      ];
-      
-      const pair = new ethers.Contract(pairAddress, pairAbi, deployer);
-      
-      // Check current pair balances
-      const usdcInPair = await usdcToken.balanceOf(pairAddress);
-      const wdotInPair = await wdotToken.balanceOf(pairAddress);
-      console.log(`  - Current USDC in pair: ${ethers.formatUnits(usdcInPair, 6)}`);
-      console.log(`  - Current WDOT in pair: ${ethers.formatUnits(wdotInPair, 10)}`);
-
-      // Transfer tokens directly to the pair
-      console.log("  - Transferring USDC to pair...");
+  
+      // Transfer tokens directly to pair then mint
+      console.log("  - Transferring tokens to pair...");
       let tx = await usdcToken.connect(deployer).transfer(pairAddress, config.initialLiquidity.usdc);
       await tx.wait();
-      
-      console.log("  - Transferring WDOT to pair...");
       tx = await wdotToken.connect(deployer).transfer(pairAddress, config.initialLiquidity.wdot);
       await tx.wait();
-      
-      // Check new pair balances
-      const newUsdcInPair = await usdcToken.balanceOf(pairAddress);
-      const newWdotInPair = await wdotToken.balanceOf(pairAddress);
-      console.log(`  - After transfer - USDC in pair: ${ethers.formatUnits(newUsdcInPair, 6)}`);
-      console.log(`  - After transfer - WDOT in pair: ${ethers.formatUnits(newWdotInPair, 10)}`);
-      
-      // Get token order
-      const token0 = await pair.token0();
-      const token1 = await pair.token1();
-      console.log(`  - Token0: ${token0}`);
-      console.log(`  - Token1: ${token1}`);
-      
-      // Check reserves before mint
-      const reservesBefore = await pair.getReserves();
-      console.log(`  - Reserves before mint: ${reservesBefore[0]} / ${reservesBefore[1]}`);
-      
-      // Mint LP tokens
-      console.log("  - Minting LP tokens...");
-      const mintTx = await pair.mint(deployer.address);
-      await mintTx.wait();
-      console.log(`    - ✅ LP tokens minted! (tx: ${mintTx.hash})`);
-      
-      // Check new reserves
-      const reservesAfter = await pair.getReserves();
-      console.log(`  - Reserves after mint: ${reservesAfter[0]} / ${reservesAfter[1]}`);
-      
-      // Check LP tokens received
-      const lpBalance = await pair.balanceOf(deployer.address);
-      console.log(`  - LP tokens received: ${ethers.formatEther(lpBalance)}`);
-      
-      // Sync the adapter
-      console.log("  - Syncing Uniswap adapter...");
+  
+      const pairAbi = [
+        "function mint(address to) external returns (uint liquidity)",
+        "function getReserves() external view returns (uint112,uint112,uint32)",
+      ];
+      const pair = new ethers.Contract(pairAddress, pairAbi, deployer);
+      tx = await pair.mint(deployer.address);
+      await tx.wait();
+      console.log(`  - ✅ LP tokens minted`);
+  
+      const reserves = await pair.getReserves();
+      console.log(`  - Reserves: ${reserves[0]} / ${reserves[1]}`);
+  
+      // Sync the adapter's cached reserves
+      console.log("  - Syncing adapter...");
       await uniswapAdapter.syncPair(usdcAddress, wdotAddress);
-      
-      // Verify the pair in adapter
-      const finalPairInfo = await uniswapAdapter.getPairInfo(usdcAddress, wdotAddress);
-      console.log(`  - Final adapter pair check:`);
-      console.log(`    - Pair address: ${finalPairInfo[0]}`);
-      console.log(`    - Reserve0: ${finalPairInfo[1]}`);
-      console.log(`    - Reserve1: ${finalPairInfo[2]}`);
-      console.log(`    - Liquidity: ${finalPairInfo[4]}`);
-      
+      console.log("  - ✅ Adapter synced");
+  
     } catch (error: any) {
-      console.error(`  - ❌ Failed to add initial liquidity: ${error.message}`);
-      if (error.data) console.error(`  - Error data: ${error.data}`);
+      console.error(`  - ❌ Failed: ${error.message}`);
     }
   }
 

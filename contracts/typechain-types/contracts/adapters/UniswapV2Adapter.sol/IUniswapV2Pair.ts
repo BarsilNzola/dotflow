@@ -3,6 +3,7 @@
 /* eslint-disable */
 import type {
   BaseContract,
+  BigNumberish,
   BytesLike,
   FunctionFragment,
   Result,
@@ -24,23 +25,33 @@ export interface IUniswapV2PairInterface extends Interface {
   getFunction(
     nameOrSignature:
       | "balanceOf"
+      | "burn"
       | "getReserves"
+      | "mint"
       | "skim"
+      | "swap"
       | "sync"
       | "token0"
       | "token1"
       | "totalSupply"
+      | "transfer"
   ): FunctionFragment;
 
   encodeFunctionData(
     functionFragment: "balanceOf",
     values: [AddressLike]
   ): string;
+  encodeFunctionData(functionFragment: "burn", values: [AddressLike]): string;
   encodeFunctionData(
     functionFragment: "getReserves",
     values?: undefined
   ): string;
+  encodeFunctionData(functionFragment: "mint", values: [AddressLike]): string;
   encodeFunctionData(functionFragment: "skim", values: [AddressLike]): string;
+  encodeFunctionData(
+    functionFragment: "swap",
+    values: [BigNumberish, BigNumberish, AddressLike, BytesLike]
+  ): string;
   encodeFunctionData(functionFragment: "sync", values?: undefined): string;
   encodeFunctionData(functionFragment: "token0", values?: undefined): string;
   encodeFunctionData(functionFragment: "token1", values?: undefined): string;
@@ -48,13 +59,20 @@ export interface IUniswapV2PairInterface extends Interface {
     functionFragment: "totalSupply",
     values?: undefined
   ): string;
+  encodeFunctionData(
+    functionFragment: "transfer",
+    values: [AddressLike, BigNumberish]
+  ): string;
 
   decodeFunctionResult(functionFragment: "balanceOf", data: BytesLike): Result;
+  decodeFunctionResult(functionFragment: "burn", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "getReserves",
     data: BytesLike
   ): Result;
+  decodeFunctionResult(functionFragment: "mint", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "skim", data: BytesLike): Result;
+  decodeFunctionResult(functionFragment: "swap", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "sync", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "token0", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "token1", data: BytesLike): Result;
@@ -62,6 +80,7 @@ export interface IUniswapV2PairInterface extends Interface {
     functionFragment: "totalSupply",
     data: BytesLike
   ): Result;
+  decodeFunctionResult(functionFragment: "transfer", data: BytesLike): Result;
 }
 
 export interface IUniswapV2Pair extends BaseContract {
@@ -109,6 +128,12 @@ export interface IUniswapV2Pair extends BaseContract {
 
   balanceOf: TypedContractMethod<[owner: AddressLike], [bigint], "view">;
 
+  burn: TypedContractMethod<
+    [to: AddressLike],
+    [[bigint, bigint] & { amount0: bigint; amount1: bigint }],
+    "nonpayable"
+  >;
+
   getReserves: TypedContractMethod<
     [],
     [
@@ -121,7 +146,20 @@ export interface IUniswapV2Pair extends BaseContract {
     "view"
   >;
 
+  mint: TypedContractMethod<[to: AddressLike], [bigint], "nonpayable">;
+
   skim: TypedContractMethod<[to: AddressLike], [void], "nonpayable">;
+
+  swap: TypedContractMethod<
+    [
+      amount0Out: BigNumberish,
+      amount1Out: BigNumberish,
+      to: AddressLike,
+      data: BytesLike
+    ],
+    [void],
+    "nonpayable"
+  >;
 
   sync: TypedContractMethod<[], [void], "nonpayable">;
 
@@ -131,6 +169,12 @@ export interface IUniswapV2Pair extends BaseContract {
 
   totalSupply: TypedContractMethod<[], [bigint], "view">;
 
+  transfer: TypedContractMethod<
+    [to: AddressLike, value: BigNumberish],
+    [boolean],
+    "nonpayable"
+  >;
+
   getFunction<T extends ContractMethod = ContractMethod>(
     key: string | FunctionFragment
   ): T;
@@ -138,6 +182,13 @@ export interface IUniswapV2Pair extends BaseContract {
   getFunction(
     nameOrSignature: "balanceOf"
   ): TypedContractMethod<[owner: AddressLike], [bigint], "view">;
+  getFunction(
+    nameOrSignature: "burn"
+  ): TypedContractMethod<
+    [to: AddressLike],
+    [[bigint, bigint] & { amount0: bigint; amount1: bigint }],
+    "nonpayable"
+  >;
   getFunction(
     nameOrSignature: "getReserves"
   ): TypedContractMethod<
@@ -152,8 +203,23 @@ export interface IUniswapV2Pair extends BaseContract {
     "view"
   >;
   getFunction(
+    nameOrSignature: "mint"
+  ): TypedContractMethod<[to: AddressLike], [bigint], "nonpayable">;
+  getFunction(
     nameOrSignature: "skim"
   ): TypedContractMethod<[to: AddressLike], [void], "nonpayable">;
+  getFunction(
+    nameOrSignature: "swap"
+  ): TypedContractMethod<
+    [
+      amount0Out: BigNumberish,
+      amount1Out: BigNumberish,
+      to: AddressLike,
+      data: BytesLike
+    ],
+    [void],
+    "nonpayable"
+  >;
   getFunction(
     nameOrSignature: "sync"
   ): TypedContractMethod<[], [void], "nonpayable">;
@@ -166,6 +232,13 @@ export interface IUniswapV2Pair extends BaseContract {
   getFunction(
     nameOrSignature: "totalSupply"
   ): TypedContractMethod<[], [bigint], "view">;
+  getFunction(
+    nameOrSignature: "transfer"
+  ): TypedContractMethod<
+    [to: AddressLike, value: BigNumberish],
+    [boolean],
+    "nonpayable"
+  >;
 
   filters: {};
 }

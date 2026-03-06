@@ -21,6 +21,9 @@ export function RoutePreview({ quote, tokenOut }: RoutePreviewProps) {
   const slippageBps = Math.floor(slippage * 100)
   const minimumReceived = quote.amountOut - (quote.amountOut * BigInt(slippageBps) / 10000n)
 
+  // Format the fee (totalFee is in tokenOut decimals)
+  const feeFormatted = formatTokenAmount(quote.totalFee, tokenOut.decimals)
+
   return (
     <div className="bg-secondary rounded-xl p-4 space-y-3">
       <div className="flex justify-between items-center">
@@ -65,9 +68,14 @@ export function RoutePreview({ quote, tokenOut }: RoutePreviewProps) {
 
       <div className="flex justify-between">
         <span className="text-sm text-muted-foreground">Network fee</span>
-        <span className="font-medium">
-          ~{formatUSD(Number(quote.estimatedGas) * 25 / 1e9)} {/* Approximate gas cost */}
-        </span>
+        <div className="text-right">
+          <span className="font-medium block">
+            {feeFormatted} {tokenOut.symbol}
+          </span>
+          <span className="text-xs text-muted-foreground">
+            ~{formatUSD(Number(quote.totalFee) * 0.01 / 10 ** tokenOut.decimals)} {/* Rough USD estimate */}
+          </span>
+        </div>
       </div>
 
       {quote.steps.length > 1 && (

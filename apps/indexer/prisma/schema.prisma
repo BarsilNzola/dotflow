@@ -15,15 +15,12 @@ model Chain {
   lastBlock   BigInt   @default(0)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
-  
-  swaps       Swap[]
-  xcmMessages XCMMessage[]
 }
 
 // Tokens on Polkadot Hub
 model Token {
   id             String   @id @default(cuid())
-  address        String   // Token contract address on Polkadot Hub
+  address        String   @unique // Token contract address on Polkadot Hub
   symbol         String
   name           String
   decimals       Int
@@ -33,8 +30,6 @@ model Token {
 
   swapsFrom      Swap[]   @relation("tokenIn")
   swapsTo        Swap[]   @relation("tokenOut")
-  
-  @@unique([address])
 }
 
 // Swaps from your DotFlowRouter
@@ -49,7 +44,7 @@ model Swap {
   amountOutMin    BigInt
   recipient       String
   fee             BigInt?
-  status          SwapStatus @default(PENDING)
+  status          String   @default("PENDING") // PENDING, COMPLETED, FAILED, CANCELLED
   txHash          String   @unique
   blockNumber     BigInt
   blockTimestamp  DateTime
@@ -67,11 +62,11 @@ model Swap {
 // XCM messages for cross-chain swaps
 model XCMMessage {
   id                String    @id @default(cuid())
-  messageId         String    @unique // bytes32
+  messageId         String    @unique
   swapId            String    @unique
   destinationChain  String    // Parachain name or ID
   amount            BigInt
-  status            XCMStatus @default(PREPARED)
+  status            String    @default("PREPARED") // PREPARED, EXECUTED, FAILED, CANCELLED, EXPIRED
   executedAt        DateTime?
   createdAt         DateTime  @default(now())
   
@@ -86,7 +81,7 @@ model Adapter {
   id              String   @id @default(cuid())
   address         String   @unique
   name            String
-  type            AdapterType
+  type            String   // UNISWAP_V2, PARACHAIN, CUSTOM
   isActive        Boolean  @default(true)
   fee             Int      // in basis points
   createdAt       DateTime @default(now())
@@ -109,25 +104,4 @@ model SyncState {
   lastBlock       BigInt
   lastSync        DateTime @default(now())
   isSyncing       Boolean  @default(false)
-}
-
-enum SwapStatus {
-  PENDING
-  COMPLETED
-  FAILED
-  CANCELLED
-}
-
-enum XCMStatus {
-  PREPARED
-  EXECUTED
-  FAILED
-  CANCELLED
-  EXPIRED
-}
-
-enum AdapterType {
-  UNISWAP_V2
-  PARACHAIN
-  CUSTOM
 }

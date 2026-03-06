@@ -1,54 +1,95 @@
 import { useQuery } from '@tanstack/react-query'
 import { usePublicClient } from 'wagmi'
-import { parseUnits, type Address } from 'viem'
+import { parseUnits, type Address, formatUnits } from 'viem'
 import { useSwapStore } from '../store/useSwapStore'
 import { useWalletStore } from '../store/useWalletStore'
 import { getContractAddress, type ChainId, type ContractName } from '../contracts/addresses'
-import DotFlowRouterABI from '../contracts/abi/DotFlowRouter.json'
+import DotFlowRouterArtifact from '../contracts/abi/DotFlowRouter.json'
+import UniswapV2AdapterArtifact from '../contracts/abi/UniswapV2Adapter.json'
 import { RouteQuote, SwapPath } from '../types'
-import { calculatePriceImpact } from '../lib/utils'
 
-// Type assertion for the ABI
-const routerABI = DotFlowRouterABI as any
+const routerABI = DotFlowRouterArtifact.abi
+const uniswapAdapterABI = UniswapV2AdapterArtifact.abi
+
+const UNISWAP_ADAPTER = '0x448928adc4a26aE816B8CB343305c4136a91dfEd'
 
 export function useRouteQuote() {
-  const { tokenIn, tokenOut, amountIn, slippage } = useSwapStore()
+  const { tokenIn, tokenOut, amountIn, slippage, setQuote } = useSwapStore()
   const { chainId } = useWalletStore()
   const publicClient = usePublicClient()
+
+  // Log the current state
+  console.log('useRouteQuote state:', {
+    tokenIn: tokenIn?.symbol,
+    tokenOut: tokenOut?.symbol,
+    amountIn,
+    chainId,
+    hasPublicClient: !!publicClient,
+    enabled: !!tokenIn && !!tokenOut && !!amountIn && !!chainId && !!publicClient && 
+             tokenIn?.chainId === chainId && tokenOut?.chainId === chainId
+  })
 
   const { data: quote, isLoading, error, refetch } = useQuery({
     queryKey: ['routeQuote', tokenIn?.address, tokenOut?.address, amountIn, chainId, slippage],
     queryFn: async (): Promise<RouteQuote | null> => {
+      console.log('🔥 queryFn executing for:', tokenIn?.symbol, '->', tokenOut?.symbol, 'amount:', amountIn)
+      
       if (!tokenIn || !tokenOut || !amountIn || !chainId || !publicClient || 
           tokenIn.chainId !== chainId || tokenOut.chainId !== chainId) {
+        console.log('❌ Missing required data for quote', {
+          tokenIn: !!tokenIn,
+          tokenOut: !!tokenOut,
+          amountIn: !!amountIn,
+          chainId: !!chainId,
+          publicClient: !!publicClient,
+          tokenInChainMatch: tokenIn?.chainId === chainId,
+          tokenOutChainMatch: tokenOut?.chainId === chainId
+        })
         return null
       }
 
       try {
         const routerAddress = getContractAddress(chainId as ChainId, 'dotFlowRouter' as ContractName)
+        console.log('Router address:', routerAddress)
         
         const amountInParsed = parseUnits(amountIn, tokenIn.decimals)
+        console.log('Amount parsed:', amountInParsed.toString())
         
-        // Get active adapters from router
-        const adapters = await publicClient.readContract({
-          address: routerAddress,
-          abi: routerABI,
-          functionName: 'getActiveAdapters'
-        }) as Address[]
+        const adapterAddress = UNISWAP_ADAPTER as Address
+        console.log('Adapter address:', adapterAddress)
 
-        if (adapters.length === 0) {
-          throw new Error('No active adapters found')
+        // Get pair info
+        const pairInfo = await publicClient.readContract({
+          address: adapterAddress,
+          abi: uniswapAdapterABI,
+          functionName: 'getPairInfo',
+          args: [tokenIn.address as Address, tokenOut.address as Address]
+        }) as any
+        
+        console.log('Pair info:', {
+          pair: pairInfo[0],
+          reserve0: pairInfo[1].toString(),
+          reserve1: pairInfo[2].toString()
+        })
+
+        if (pairInfo[0] === '0x0000000000000000000000000000000000000000') {
+          throw new Error('Pair does not exist')
         }
 
-        // Build optimal path (simplified - in production you'd have a routing algorithm)
         const path: SwapPath = {
-          adapters: [adapters[0]],
+          adapters: [adapterAddress],
           path: [tokenIn.address as Address, tokenOut.address as Address],
           isCrossChain: false,
           destinationChains: []
         }
 
-        // Get quote from router
+        console.log('Calling router.getAmountOut with:', {
+          tokenIn: tokenIn.address,
+          tokenOut: tokenOut.address,
+          amountIn: amountInParsed.toString(),
+          path
+        })
+
         const result = await publicClient.readContract({
           address: routerAddress,
           abi: routerABI,
@@ -62,49 +103,38 @@ export function useRouteQuote() {
         }) as [bigint, bigint, bigint]
 
         const [amountOut, totalFee] = result
+        console.log('Router result:', {
+          amountOut: amountOut.toString(),
+          amountOutFormatted: formatUnits(amountOut, tokenOut.decimals),
+          totalFee: totalFee.toString(),
+          totalFeeFormatted: formatUnits(totalFee, tokenOut.decimals)
+        })
 
-        // Get reserves for price impact calculation
-        const reserveIn = await publicClient.readContract({
-          address: adapters[0],
-          abi: routerABI,
-          functionName: 'getReserves',
-          args: [tokenIn.address]
-        }) as [bigint, bigint]
-
-        const reserveOut = await publicClient.readContract({
-          address: adapters[0],
-          abi: routerABI,
-          functionName: 'getReserves',
-          args: [tokenOut.address]
-        }) as [bigint, bigint]
-
-        const calculatedPriceImpact = calculatePriceImpact(
-          amountInParsed,
-          amountOut,
-          reserveIn[0],
-          reserveOut[0]
-        )
-
-        return {
+        const newQuote: RouteQuote = {
           amountOut,
           totalFee,
-          priceImpact: calculatedPriceImpact,
+          priceImpact: 0,
           path,
           estimatedGas: 200000n,
-          adapters: [adapters[0]],
+          adapters: [adapterAddress],
           steps: [{
-            adapter: adapters[0],
+            adapter: adapterAddress,
             tokenIn: tokenIn.address,
             tokenOut: tokenOut.address,
             amountIn: amountInParsed,
             amountOut,
             fee: totalFee,
-            priceImpact: calculatedPriceImpact,
+            priceImpact: 0,
             estimatedGas: 200000n
           }]
         }
-      } catch (error) {
-        console.error('Error fetching quote:', error)
+
+        setQuote(newQuote)
+        console.log('Quote set successfully')
+        return newQuote
+      } catch (error: any) {
+        console.error('Error in queryFn:', error)
+        setQuote(null)
         throw error
       }
     },
@@ -113,6 +143,8 @@ export function useRouteQuote() {
     staleTime: 10000,
     refetchInterval: 30000
   })
+
+  console.log('useRouteQuote return:', { isLoading, hasError: !!error, hasQuote: !!quote })
 
   return {
     quote,

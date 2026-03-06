@@ -30,7 +30,7 @@ export function SwapForm() {
 
   const [showTokenSelect, setShowTokenSelect] = useState<'in' | 'out' | null>(null)
 
-  const { balance: tokenInBalance, formatted: tokenInBalanceFormatted } = useTokenBalance(tokenIn)
+  const { balance: tokenInBalance, formatted: tokenInBalanceFormatted, refetch: refetchBalance } = useTokenBalance(tokenIn)
   const { quote, isLoading: isQuoteLoading } = useRouteQuote()
   const { executeSwap, executeCrossChainSwap } = useExecuteRoute()
 
@@ -62,22 +62,32 @@ export function SwapForm() {
       return
     }
 
-    if (tokenIn.chainId !== tokenOut.chainId) {
-      // Cross-chain swap
-      if (!recipient) {
-        toast.error('Please enter recipient address for cross-chain swap')
-        return
+    try {
+      if (tokenIn.chainId !== tokenOut.chainId) {
+        if (!recipient) {
+          toast.error('Please enter recipient address for cross-chain swap')
+          return
+        }
+        await executeCrossChainSwap(
+          tokenOut.chainId,
+          '0x',
+          3600
+        )
+      } else {
+        await executeSwap()
       }
-      
-      // Execute cross-chain swap
-      await executeCrossChainSwap(
-        tokenOut.chainId,
-        '0x', // XCM call data
-        3600 // 1 hour timeout
-      )
-    } else {
-      // Same-chain swap
-      await executeSwap()
+        setAmountIn('')
+        setAmountOut('')
+        refetchBalance()
+    } catch (error: any) {
+      // Handle specific error messages
+      if (error.message?.includes('Amount must be between')) {
+        toast.error(error.message)
+      } else if (error.message?.includes('Insufficient balance')) {
+        toast.error('Insufficient balance for this swap')
+      } else {
+        toast.error(error.message || 'Swap failed')
+      }
     }
   }
 

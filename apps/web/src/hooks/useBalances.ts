@@ -66,7 +66,7 @@ export function useMultipleTokenBalances(tokens: Token[]) {
   
   const results = useQueries({
     queries: tokens.map((token) => ({
-      queryKey: ['tokenBalance', address, token.address, token.chainId],
+      queryKey: ['tokenBalance', address, token?.address, token?.chainId],
       queryFn: async () => {
         if (!address || !token || chainId !== token.chainId || !publicClient) {
           return { token, balance: 0n }
@@ -91,8 +91,10 @@ export function useMultipleTokenBalances(tokens: Token[]) {
   })
 
   const balances = new Map<string, bigint>()
+  
   results.forEach((result) => {
-    if (result.data) {
+    // Check if result.data exists and has the token property
+    if (result.data && result.data.token && result.data.token.address) {
       balances.set(result.data.token.address, result.data.balance)
     }
   })

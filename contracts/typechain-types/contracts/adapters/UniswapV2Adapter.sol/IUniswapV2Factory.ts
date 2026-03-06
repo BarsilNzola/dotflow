@@ -3,7 +3,6 @@
 /* eslint-disable */
 import type {
   BaseContract,
-  BigNumberish,
   BytesLike,
   FunctionFragment,
   Result,
@@ -22,18 +21,8 @@ import type {
 } from "../../../common";
 
 export interface IUniswapV2FactoryInterface extends Interface {
-  getFunction(
-    nameOrSignature: "allPairs" | "allPairsLength" | "createPair" | "getPair"
-  ): FunctionFragment;
+  getFunction(nameOrSignature: "createPair" | "getPair"): FunctionFragment;
 
-  encodeFunctionData(
-    functionFragment: "allPairs",
-    values: [BigNumberish]
-  ): string;
-  encodeFunctionData(
-    functionFragment: "allPairsLength",
-    values?: undefined
-  ): string;
   encodeFunctionData(
     functionFragment: "createPair",
     values: [AddressLike, AddressLike]
@@ -43,11 +32,6 @@ export interface IUniswapV2FactoryInterface extends Interface {
     values: [AddressLike, AddressLike]
   ): string;
 
-  decodeFunctionResult(functionFragment: "allPairs", data: BytesLike): Result;
-  decodeFunctionResult(
-    functionFragment: "allPairsLength",
-    data: BytesLike
-  ): Result;
   decodeFunctionResult(functionFragment: "createPair", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "getPair", data: BytesLike): Result;
 }
@@ -95,10 +79,6 @@ export interface IUniswapV2Factory extends BaseContract {
     event?: TCEvent
   ): Promise<this>;
 
-  allPairs: TypedContractMethod<[arg0: BigNumberish], [string], "view">;
-
-  allPairsLength: TypedContractMethod<[], [bigint], "view">;
-
   createPair: TypedContractMethod<
     [tokenA: AddressLike, tokenB: AddressLike],
     [string],
@@ -115,12 +95,6 @@ export interface IUniswapV2Factory extends BaseContract {
     key: string | FunctionFragment
   ): T;
 
-  getFunction(
-    nameOrSignature: "allPairs"
-  ): TypedContractMethod<[arg0: BigNumberish], [string], "view">;
-  getFunction(
-    nameOrSignature: "allPairsLength"
-  ): TypedContractMethod<[], [bigint], "view">;
   getFunction(
     nameOrSignature: "createPair"
   ): TypedContractMethod<

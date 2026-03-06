@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { XMarkIcon, MagnifyingGlassIcon } from '@heroicons/react/24/outline'
 import { useWalletStore } from '../../store/useWalletStore'
 import { useMultipleTokenBalances } from '../../hooks/useBalances'
+import { usePublicClient } from 'wagmi'
 import { Token } from '../../types'
 import { cn, formatTokenAmount } from '../../lib/utils'
 import { tokenService } from '../../services/tokenService'
@@ -17,17 +18,18 @@ export function TokenSelect({ type, onSelect, onClose }: TokenSelectProps) {
   const [tokens, setTokens] = useState<Token[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const { chainId } = useWalletStore()
+  const publicClient = usePublicClient()
 
   useEffect(() => {
     const loadTokens = async () => {
-      if (!chainId) {
+      if (!chainId || !publicClient) {
         setIsLoading(false)
         return
       }
       
       setIsLoading(true)
       try {
-        const allTokens = await tokenService.getAllSupportedTokens(chainId)
+        const allTokens = await tokenService.getAllSupportedTokens(chainId, publicClient)
         setTokens(allTokens)
       } catch (error) {
         console.error('Error loading tokens:', error)
@@ -37,18 +39,18 @@ export function TokenSelect({ type, onSelect, onClose }: TokenSelectProps) {
     }
 
     loadTokens()
-  }, [chainId])
+  }, [chainId, publicClient])
 
   useEffect(() => {
     const searchTokens = async () => {
-      if (!chainId) {
+      if (!chainId || !publicClient) {
         return
       }
       
       if (!search.trim()) {
         setIsLoading(true)
         try {
-          const allTokens = await tokenService.getAllSupportedTokens(chainId)
+          const allTokens = await tokenService.getAllSupportedTokens(chainId, publicClient)
           setTokens(allTokens)
         } catch (error) {
           console.error('Error loading tokens:', error)
@@ -60,7 +62,7 @@ export function TokenSelect({ type, onSelect, onClose }: TokenSelectProps) {
       
       setIsLoading(true)
       try {
-        const results = await tokenService.searchTokens(chainId, search)
+        const results = await tokenService.searchTokens(chainId, search, publicClient)
         setTokens(results)
       } catch (error) {
         console.error('Error searching tokens:', error)
@@ -71,7 +73,7 @@ export function TokenSelect({ type, onSelect, onClose }: TokenSelectProps) {
 
     const debounce = setTimeout(searchTokens, 300)
     return () => clearTimeout(debounce)
-  }, [search, chainId])
+  }, [search, chainId, publicClient])
 
   // Filter tokens based on type and chainId
   const filteredTokens = tokens.filter((token) => {
@@ -105,12 +107,17 @@ export function TokenSelect({ type, onSelect, onClose }: TokenSelectProps) {
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search name or paste address"
               className="w-full bg-secondary rounded-xl pl-10 pr-4 py-3 border border-border focus:border-primary outline-none"
-              disabled={!chainId}
+              disabled={!chainId || !publicClient}
             />
           </div>
           {!chainId && (
             <p className="text-xs text-muted-foreground mt-2">
               Please connect your wallet to view tokens
+            </p>
+          )}
+          {chainId && !publicClient && (
+            <p className="text-xs text-muted-foreground mt-2">
+              Waiting for connection...
             </p>
           )}
         </div>

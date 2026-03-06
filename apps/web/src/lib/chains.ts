@@ -1,16 +1,16 @@
 import { type Chain } from 'viem'
 
 export const POLKADOT_HUB: Chain = {
-  id: 3000,
+  id: 420420417,
   name: 'Polkadot Hub',
   nativeCurrency: {
     decimals: 10,
-    name: 'DOT',
-    symbol: 'DOT',
+    name: 'PAS',
+    symbol: 'PAS',
   },
   rpcUrls: {
-    default: { http: ['https://services.polkadothub-rpc.com/testnet'] },
-    public: { http: ['https://services.polkadothub-rpc.com/testnet'] },
+    default: { http: ['https://eth-rpc-testnet.polkadot.io'] },
+    public: { http: ['https://eth-rpc-testnet.polkadot.io'] },
   },
   blockExplorers: {
     default: { name: 'Explorer', url: 'https://explorer.polkadot-hub.com' },

@@ -4,7 +4,7 @@ export function Footer() {
         <div className="container mx-auto px-4 py-6">
           <div className="flex justify-between items-center text-sm text-muted-foreground">
             <div>
-              © 2024 DotFlow. All rights reserved.
+              © 2026 DotFlow. All rights reserved.
             </div>
             <div className="flex space-x-6">
               <a href="#" className="hover:text-foreground transition-colors">

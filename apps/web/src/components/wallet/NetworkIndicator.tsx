@@ -1,6 +1,9 @@
 import { useWalletStore } from '../../store/useWalletStore'
-import { CHAIN_NAMES } from '../../lib/chains'
 import { cn } from '../../lib/utils'
+
+const SUPPORTED_CHAINS = {
+  0: 'Polkadot Hub'
+} as const
 
 export function NetworkIndicator() {
   const { chainId } = useWalletStore()
@@ -14,7 +17,8 @@ export function NetworkIndicator() {
     )
   }
 
-  const isSupported = chainId in CHAIN_NAMES
+  const isSupported = chainId in SUPPORTED_CHAINS
+  const chainName = SUPPORTED_CHAINS[chainId as keyof typeof SUPPORTED_CHAINS] || `Chain ${chainId}`
 
   return (
     <div className={cn(
@@ -26,7 +30,7 @@ export function NetworkIndicator() {
         isSupported ? 'bg-green-500' : 'bg-red-500'
       )} />
       <span className="text-sm">
-        {CHAIN_NAMES[chainId] || `Chain ${chainId}`}
+        {chainName}
       </span>
     </div>
   )

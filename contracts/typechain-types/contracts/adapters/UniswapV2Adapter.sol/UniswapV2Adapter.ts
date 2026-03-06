@@ -71,7 +71,6 @@ export interface UniswapV2AdapterInterface extends Interface {
       | "feeCollector"
       | "getAdapterInfo"
       | "getAmountOut"
-      | "getAmountsIn"
       | "getFactory"
       | "getFee"
       | "getPairInfo"
@@ -167,10 +166,6 @@ export interface UniswapV2AdapterInterface extends Interface {
   encodeFunctionData(
     functionFragment: "getAmountOut",
     values: [AddressLike, AddressLike, BigNumberish]
-  ): string;
-  encodeFunctionData(
-    functionFragment: "getAmountsIn",
-    values: [BigNumberish, AddressLike, AddressLike]
   ): string;
   encodeFunctionData(
     functionFragment: "getFactory",
@@ -327,10 +322,6 @@ export interface UniswapV2AdapterInterface extends Interface {
   ): Result;
   decodeFunctionResult(
     functionFragment: "getAmountOut",
-    data: BytesLike
-  ): Result;
-  decodeFunctionResult(
-    functionFragment: "getAmountsIn",
     data: BytesLike
   ): Result;
   decodeFunctionResult(functionFragment: "getFactory", data: BytesLike): Result;
@@ -757,33 +748,19 @@ export interface UniswapV2Adapter extends BaseContract {
     "view"
   >;
 
-  getAmountsIn: TypedContractMethod<
-    [amountOut: BigNumberish, tokenIn: AddressLike, tokenOut: AddressLike],
-    [bigint],
-    "view"
-  >;
-
   getFactory: TypedContractMethod<[], [string], "view">;
 
   getFee: TypedContractMethod<[], [bigint], "view">;
 
   getPairInfo: TypedContractMethod<
-    [tokenA: AddressLike, tokenB: AddressLike],
-    [
-      [string, bigint, bigint, bigint, bigint] & {
-        pair: string;
-        reserve0: bigint;
-        reserve1: bigint;
-        swapFee: bigint;
-        liquidity: bigint;
-      }
-    ],
+    [a: AddressLike, b: AddressLike],
+    [[string, bigint, bigint, bigint, bigint]],
     "view"
   >;
 
   getReserves: TypedContractMethod<
     [token: AddressLike],
-    [[bigint, bigint] & { reserve: bigint; lastUpdate: bigint }],
+    [[bigint, bigint]],
     "view"
   >;
 
@@ -858,30 +835,22 @@ export interface UniswapV2Adapter extends BaseContract {
     "nonpayable"
   >;
 
-  setActive: TypedContractMethod<[active: boolean], [void], "nonpayable">;
+  setActive: TypedContractMethod<[a: boolean], [void], "nonpayable">;
 
-  setFactory: TypedContractMethod<
-    [factory_: AddressLike],
-    [void],
-    "nonpayable"
-  >;
+  setFactory: TypedContractMethod<[f: AddressLike], [void], "nonpayable">;
 
-  setFee: TypedContractMethod<[newFee: BigNumberish], [void], "nonpayable">;
+  setFee: TypedContractMethod<[f: BigNumberish], [void], "nonpayable">;
 
-  setFeeCollector: TypedContractMethod<
-    [newCollector: AddressLike],
-    [void],
-    "nonpayable"
-  >;
+  setFeeCollector: TypedContractMethod<[c: AddressLike], [void], "nonpayable">;
 
   setSwapLimits: TypedContractMethod<
-    [minAmount: BigNumberish, maxAmount: BigNumberish],
+    [mn: BigNumberish, mx: BigNumberish],
     [void],
     "nonpayable"
   >;
 
   skimPair: TypedContractMethod<
-    [tokenA: AddressLike, tokenB: AddressLike, to: AddressLike],
+    [a: AddressLike, b: AddressLike, to: AddressLike],
     [void],
     "nonpayable"
   >;
@@ -899,7 +868,7 @@ export interface UniswapV2Adapter extends BaseContract {
       amountIn: BigNumberish,
       amountOutMin: BigNumberish,
       recipient: AddressLike,
-      data: BytesLike
+      arg5: BytesLike
     ],
     [[bigint, bigint] & { amountOut: bigint; feeAmount: bigint }],
     "nonpayable"
@@ -908,7 +877,7 @@ export interface UniswapV2Adapter extends BaseContract {
   syncAllPairs: TypedContractMethod<[], [void], "nonpayable">;
 
   syncPair: TypedContractMethod<
-    [tokenA: AddressLike, tokenB: AddressLike],
+    [a: AddressLike, b: AddressLike],
     [void],
     "nonpayable"
   >;
@@ -994,13 +963,6 @@ export interface UniswapV2Adapter extends BaseContract {
     "view"
   >;
   getFunction(
-    nameOrSignature: "getAmountsIn"
-  ): TypedContractMethod<
-    [amountOut: BigNumberish, tokenIn: AddressLike, tokenOut: AddressLike],
-    [bigint],
-    "view"
-  >;
-  getFunction(
     nameOrSignature: "getFactory"
   ): TypedContractMethod<[], [string], "view">;
   getFunction(
@@ -1009,25 +971,13 @@ export interface UniswapV2Adapter extends BaseContract {
   getFunction(
     nameOrSignature: "getPairInfo"
   ): TypedContractMethod<
-    [tokenA: AddressLike, tokenB: AddressLike],
-    [
-      [string, bigint, bigint, bigint, bigint] & {
-        pair: string;
-        reserve0: bigint;
-        reserve1: bigint;
-        swapFee: bigint;
-        liquidity: bigint;
-      }
-    ],
+    [a: AddressLike, b: AddressLike],
+    [[string, bigint, bigint, bigint, bigint]],
     "view"
   >;
   getFunction(
     nameOrSignature: "getReserves"
-  ): TypedContractMethod<
-    [token: AddressLike],
-    [[bigint, bigint] & { reserve: bigint; lastUpdate: bigint }],
-    "view"
-  >;
+  ): TypedContractMethod<[token: AddressLike], [[bigint, bigint]], "view">;
   getFunction(
     nameOrSignature: "getRoleAdmin"
   ): TypedContractMethod<[role: BytesLike], [string], "view">;
@@ -1111,27 +1061,27 @@ export interface UniswapV2Adapter extends BaseContract {
   >;
   getFunction(
     nameOrSignature: "setActive"
-  ): TypedContractMethod<[active: boolean], [void], "nonpayable">;
+  ): TypedContractMethod<[a: boolean], [void], "nonpayable">;
   getFunction(
     nameOrSignature: "setFactory"
-  ): TypedContractMethod<[factory_: AddressLike], [void], "nonpayable">;
+  ): TypedContractMethod<[f: AddressLike], [void], "nonpayable">;
   getFunction(
     nameOrSignature: "setFee"
-  ): TypedContractMethod<[newFee: BigNumberish], [void], "nonpayable">;
+  ): TypedContractMethod<[f: BigNumberish], [void], "nonpayable">;
   getFunction(
     nameOrSignature: "setFeeCollector"
-  ): TypedContractMethod<[newCollector: AddressLike], [void], "nonpayable">;
+  ): TypedContractMethod<[c: AddressLike], [void], "nonpayable">;
   getFunction(
     nameOrSignature: "setSwapLimits"
   ): TypedContractMethod<
-    [minAmount: BigNumberish, maxAmount: BigNumberish],
+    [mn: BigNumberish, mx: BigNumberish],
     [void],
     "nonpayable"
   >;
   getFunction(
     nameOrSignature: "skimPair"
   ): TypedContractMethod<
-    [tokenA: AddressLike, tokenB: AddressLike, to: AddressLike],
+    [a: AddressLike, b: AddressLike, to: AddressLike],
     [void],
     "nonpayable"
   >;
@@ -1147,7 +1097,7 @@ export interface UniswapV2Adapter extends BaseContract {
       amountIn: BigNumberish,
       amountOutMin: BigNumberish,
       recipient: AddressLike,
-      data: BytesLike
+      arg5: BytesLike
     ],
     [[bigint, bigint] & { amountOut: bigint; feeAmount: bigint }],
     "nonpayable"
@@ -1158,7 +1108,7 @@ export interface UniswapV2Adapter extends BaseContract {
   getFunction(
     nameOrSignature: "syncPair"
   ): TypedContractMethod<
-    [tokenA: AddressLike, tokenB: AddressLike],
+    [a: AddressLike, b: AddressLike],
     [void],
     "nonpayable"
   >;
