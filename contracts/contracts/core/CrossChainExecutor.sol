@@ -5,528 +5,400 @@ import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
-import "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
+
+import "../interfaces/IXcmPrecompile.sol";
+
 import "../interfaces/IXCM.sol";
 
-contract CrossChainExecutor is AccessControl, ReentrancyGuard, EIP712, IXCM {
+
+/**
+ * @title CrossChainExecutor
+ * @notice Locks ERC-20 tokens on Polkadot Hub and dispatches an XCM message
+ *         to a destination parachain via the on-chain XCM precompile at
+ *         0x00000000000000000000000000000000000a0000.
+ *
+ * Flow:
+ *   1. Caller (ParachainAdapter) calls sendParachainAssets() with ETH fee.
+ *   2. Tokens are transferred from caller into this contract.
+ *   3. A SCALE-encoded XCM message (ReserveTransferAssets) is built on-chain.
+ *   4. xcmSend() on the precompile dispatches the message.
+ *   5. MessageId is recorded with status Pending; a relayer may later mark it Executed.
+ *
+ * SCALE encoding notes:
+ *   - Destination MultiLocation: parents=0, interior=X1(Parachain(id))
+ *   - Beneficiary MultiLocation: parents=0, interior=X1(AccountId32 or AccountKey20)
+ *   - Asset:  Concrete(parents=0, interior=Here), fungible(amount)
+ *
+ * All SCALE encoding is done in pure Solidity helpers below.
+ */
+contract CrossChainExecutor is AccessControl, ReentrancyGuard, IXCM {
     using SafeERC20 for IERC20;
-    using ECDSA for bytes32;
     using EnumerableSet for EnumerableSet.Bytes32Set;
 
-    bytes32 public constant EXECUTOR_ROLE = keccak256("EXECUTOR_ROLE");
-    bytes32 public constant RELAYER_ROLE = keccak256("RELAYER_ROLE");
+    // ── Roles ──────────────────────────────────────────────────────────────────
+    bytes32 public constant EXECUTOR_ROLE    = keccak256("EXECUTOR_ROLE");
+    bytes32 public constant RELAYER_ROLE     = keccak256("RELAYER_ROLE");
     bytes32 public constant CONFIGURATOR_ROLE = keccak256("CONFIGURATOR_ROLE");
 
-    bytes32 private constant XCM_INSTRUCTION_TYPEHASH = keccak256(
-        "XCMInstruction(uint32 destinationChainId,address sender,address recipient,address asset,uint128 amount,bytes callData,uint64 weight,uint128 transactWeight,uint64 timeout)"
-    );
+    // ── XCM Precompile ─────────────────────────────────────────────────────────
+    address public constant XCM_PRECOMPILE = 0x00000000000000000000000000000000000a0000;
 
+    // ── Chain config ───────────────────────────────────────────────────────────
     struct ChainConfig {
-        uint32 chainId;
-        string name;
-        uint256 baseFee;
-        uint256 weightFee;
+        uint32  chainId;
+        string  name;
+        uint256 baseFee;       // in wei (PAS)
+        uint256 weightFee;     // per unit of weight
         uint256 minFee;
-        uint64 maxWeight;
-        address gateway;
-        bytes32 genesisHash;
-        bool isActive;
+        uint64  maxWeight;
+        bool    isActive;
+        // XCM weight to buy on destination — covers ReserveTransferAssets + DepositAsset
+        uint64  xcmRefTime;
+        uint64  xcmProofSize;
     }
 
     struct Message {
-        bytes32 id;
-        uint32 sourceChainId;
-        uint32 destinationChainId;
-        address sender;
-        address recipient;
-        address asset;
-        uint128 amount;
-        bytes callData;
-        uint64 timestamp;
-        uint64 timeout;
-        bytes32 hash;
+        bytes32       id;
+        uint32        sourceChainId;
+        uint32        destinationChainId;
+        address       sender;
+        address       recipient;
+        address       asset;
+        uint128       amount;
+        uint64        timestamp;
+        uint64        timeout;
         MessageStatus status;
     }
 
     struct AssetMapping {
         bytes32 assetId;
         address tokenAddress;
-        uint8 decimals;
-        bool isNative;
-        bool exists;
+        uint8   decimals;
+        bool    isNative;
+        bool    exists;
     }
 
-    mapping(uint32 => ChainConfig) private _chainConfigs;
-    mapping(bytes32 => Message) private _messages;
-    mapping(uint32 => mapping(bytes32 => bool)) private _executedMessages;
-    mapping(address => mapping(uint32 => uint256)) private _nonces;
-    
-    mapping(uint32 => mapping(bytes32 => address)) private _assetToToken;
-    mapping(address => mapping(uint32 => AssetMapping)) private _tokenToAsset;
-    mapping(uint32 => EnumerableSet.Bytes32Set) private _chainAssets;
+    // ── Storage ────────────────────────────────────────────────────────────────
+    mapping(uint32  => ChainConfig)                          private _chainConfigs;
+    mapping(bytes32 => Message)                              private _messages;
+    mapping(address => mapping(uint32 => uint256))           private _nonces;
+    mapping(uint32  => mapping(bytes32 => address))          private _assetToToken;
+    mapping(address => mapping(uint32 => AssetMapping))      private _tokenToAsset;
+    mapping(uint32  => EnumerableSet.Bytes32Set)             private _chainAssets;
 
-    uint256 private constant MAX_TIMEOUT = 7 days;
-    uint256 private constant MIN_TIMEOUT = 1 hours;
-    uint64 private constant MAX_WEIGHT = 10000000000;
-    uint256 private constant WEIGHT_DENOMINATOR = 1000000;
+    uint256 private constant MAX_TIMEOUT      = 7 days;
+    uint256 private constant MIN_TIMEOUT      = 1 hours;
+    uint64  private constant MAX_WEIGHT       = 10_000_000_000;
+    uint256 private constant WEIGHT_DENOM     = 1_000_000;
 
-    event AssetMapped(uint32 indexed chainId, bytes32 indexed assetId, address indexed token, uint8 decimals, bool isNative);
-    event AssetUnmapped(uint32 indexed chainId, bytes32 indexed assetId, address indexed token);
-    event ChainConfigured(uint32 indexed chainId, string name, address gateway, uint256 baseFee);
+    // ── Events ─────────────────────────────────────────────────────────────────
+    event ChainConfigured(uint32 indexed chainId, string name, uint256 baseFee);
     event ChainDeactivated(uint32 indexed chainId);
     event MessageStatusUpdated(bytes32 indexed messageId, MessageStatus status);
-    event AssetsTransferred(bytes32 indexed messageId, uint32 indexed chainId, address indexed sender, uint256 assetCount);
+    event AssetMapped(uint32 indexed chainId, bytes32 indexed assetId, address indexed token, uint8 decimals, bool isNative);
 
-    constructor() EIP712("CrossChainExecutor", "1") {
+    constructor() {
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _grantRole(CONFIGURATOR_ROLE, msg.sender);
+        _grantRole(RELAYER_ROLE,      msg.sender);
+        _grantRole(EXECUTOR_ROLE,     msg.sender);
     }
 
-    function sendXCM(
-        XCMInstruction calldata instruction
-    ) external payable override nonReentrant returns (bytes32 messageId) {
-        ChainConfig storage config = _chainConfigs[instruction.destinationChainId];
-        if (!config.isActive) revert ChainNotSupported(instruction.destinationChainId);
-        if (instruction.recipient == address(0)) revert InvalidRecipient();
-        if (instruction.amount == 0) revert("Zero amount");
-        if (instruction.timeout < MIN_TIMEOUT || instruction.timeout > MAX_TIMEOUT) revert("Invalid timeout");
-        if (instruction.weight > config.maxWeight) revert("Weight exceeds max");
-
-        uint256 requiredFee = _calculateFee(instruction.destinationChainId, instruction.weight, instruction.amount);
-        if (msg.value < requiredFee) revert InsufficientFee(requiredFee, msg.value);
-
-        messageId = _generateMessageId(
-            instruction.sender,
-            instruction.recipient,
-            instruction.asset,
-            instruction.amount,
-            instruction.destinationChainId,
-            _nonces[instruction.sender][instruction.destinationChainId]++
-        );
-
-        Message storage message = _messages[messageId];
-        message.id = messageId;
-        message.sourceChainId = uint32(block.chainid);
-        message.destinationChainId = instruction.destinationChainId;
-        message.sender = instruction.sender;
-        message.recipient = instruction.recipient;
-        message.asset = instruction.asset;
-        message.amount = instruction.amount;
-        message.callData = instruction.callData;
-        message.timestamp = uint64(block.timestamp);
-        message.timeout = instruction.timeout;
-        message.hash = _hashInstruction(instruction);
-        message.status = MessageStatus.Pending;
-
-        if (instruction.asset != address(0)) {
-            IERC20(instruction.asset).safeTransferFrom(
-                instruction.sender,
-                address(this),
-                instruction.amount
-            );
-        }
-
-        emit XCMMessagePrepared(
-            messageId,
-            instruction.destinationChainId,
-            instruction.sender,
-            instruction.recipient,
-            instruction.asset,
-            instruction.amount,
-            instruction.timeout
-        );
-
-        if (msg.value > requiredFee) {
-            payable(msg.sender).transfer(msg.value - requiredFee);
-        }
-
-        return messageId;
-    }
-
+    // ─────────────────────────────────────────────────────────────────────────
+    // sendParachainAssets — main entry point called by ParachainAdapter
+    // ─────────────────────────────────────────────────────────────────────────
     function sendParachainAssets(
         uint32 parachainId,
         address recipient,
         ParachainAsset[] calldata assets,
-        bytes calldata callData,
+        bytes calldata /*callData*/,
         uint64 timeout
-    ) external payable override returns (bytes32 messageId) {
-        if (assets.length == 0) revert("No assets");
-        if (recipient == address(0)) revert InvalidRecipient();
+    ) external payable override nonReentrant returns (bytes32 messageId) {
+        require(assets.length > 0,          "No assets");
+        require(recipient != address(0),    "Invalid recipient");
 
-        ChainConfig storage config = _chainConfigs[parachainId];
-        if (!config.isActive) revert ChainNotSupported(parachainId);
+        ChainConfig storage cfg = _chainConfigs[parachainId];
+        if (!cfg.isActive) revert ChainNotSupported(parachainId);
+        if (timeout < MIN_TIMEOUT || timeout > MAX_TIMEOUT) revert("Invalid timeout");
 
+        // ── Pull tokens from caller ──────────────────────────────────────────
         uint128 totalAmount = 0;
+        address firstToken  = address(0);
+
         for (uint i = 0; i < assets.length; i++) {
-            ParachainAsset calldata asset = assets[i];
-            
-            address tokenAddress = _assetToToken[parachainId][asset.assetId];
-            if (tokenAddress == address(0)) revert("Asset not mapped");
-            
-            if (!asset.isNative) {
-                IERC20(tokenAddress).safeTransferFrom(
-                    msg.sender,
-                    address(this),
-                    asset.amount
-                );
+            address tokenAddr = _assetToToken[parachainId][assets[i].assetId];
+            require(tokenAddr != address(0), "Asset not mapped");
+
+            if (!assets[i].isNative) {
+                IERC20(tokenAddr).safeTransferFrom(msg.sender, address(this), assets[i].amount);
             }
-            totalAmount += asset.amount;
+            totalAmount += assets[i].amount;
+            if (i == 0) firstToken = tokenAddr;
         }
 
-        uint64 weight = _calculateParachainWeight(assets.length, callData.length);
-        uint128 transactWeight = weight * 2;
+        // ── Fee check ────────────────────────────────────────────────────────
+        uint64 weight = _calcWeight(assets.length);
+        uint256 required = _calcFee(parachainId, weight, totalAmount);
+        if (msg.value < required) revert InsufficientFee(required, msg.value);
 
-        uint256 requiredFee = _calculateFee(parachainId, weight, totalAmount);
-        if (msg.value < requiredFee) revert InsufficientFee(requiredFee, msg.value);
-
-        messageId = _generateMessageId(
-            msg.sender,
-            recipient,
-            address(0),
-            totalAmount,
-            parachainId,
-            _nonces[msg.sender][parachainId]++
+        // ── Build message ID ─────────────────────────────────────────────────
+        messageId = _makeMessageId(
+            msg.sender, recipient, firstToken, totalAmount,
+            parachainId, _nonces[msg.sender][parachainId]++
         );
 
-        Message storage message = _messages[messageId];
-        message.id = messageId;
-        message.sourceChainId = uint32(block.chainid);
-        message.destinationChainId = parachainId;
-        message.sender = msg.sender;
-        message.recipient = recipient;
-        message.asset = address(0);
-        message.amount = totalAmount;
-        message.callData = abi.encode(assets, callData);
-        message.timestamp = uint64(block.timestamp);
-        message.timeout = timeout;
-        message.hash = keccak256(abi.encode(assets, callData));
-        message.status = MessageStatus.Pending;
+        // ── Store message ────────────────────────────────────────────────────
+        Message storage m = _messages[messageId];
+        m.id                  = messageId;
+        m.sourceChainId       = uint32(block.chainid);
+        m.destinationChainId  = parachainId;
+        m.sender              = msg.sender;
+        m.recipient           = recipient;
+        m.asset               = firstToken;
+        m.amount              = totalAmount;
+        m.timestamp           = uint64(block.timestamp);
+        m.timeout             = uint64(timeout);
+        m.status              = MessageStatus.Pending;
 
-        emit XCMMessagePrepared(
-            messageId,
-            parachainId,
-            msg.sender,
-            recipient,
-            address(0),
-            totalAmount,
-            timeout
-        );
+        emit XCMMessagePrepared(messageId, parachainId, msg.sender, recipient, firstToken, totalAmount, timeout);
 
-        emit AssetsTransferred(messageId, parachainId, msg.sender, assets.length);
+        // ── Dispatch via XCM precompile ──────────────────────────────────────
+        _dispatchXCM(parachainId, recipient, assets[0], cfg, messageId);
 
-        if (msg.value > requiredFee) {
-            payable(msg.sender).transfer(msg.value - requiredFee);
+        // ── Refund excess ETH ────────────────────────────────────────────────
+        if (msg.value > required) {
+            payable(msg.sender).transfer(msg.value - required);
         }
 
         return messageId;
     }
 
-    function executeXCM(
-        bytes calldata encodedMessage,
-        bytes calldata signature
-    ) external override onlyRole(EXECUTOR_ROLE) returns (bool success, bytes memory result) {
-        XCMInstruction memory instruction = abi.decode(encodedMessage, (XCMInstruction));
-        bytes32 messageId = keccak256(encodedMessage);
-        
-        Message storage message = _messages[messageId];
-        if (message.id == bytes32(0)) revert MessageNotFound(messageId);
-        if (message.status != MessageStatus.Pending) revert MessageAlreadyExecuted(messageId);
-        if (block.timestamp > message.timestamp + message.timeout) {
-            message.status = MessageStatus.Expired;
-            emit MessageStatusUpdated(messageId, MessageStatus.Expired);
-            revert MessageExpired(messageId);
+    // ─────────────────────────────────────────────────────────────────────────
+    // _dispatchXCM — builds SCALE-encoded XCM and calls the precompile
+    // ─────────────────────────────────────────────────────────────────────────
+    function _dispatchXCM(
+        uint32 parachainId,
+        address recipient,
+        ParachainAsset calldata asset,
+        ChainConfig storage cfg,
+        bytes32 messageId
+    ) internal {
+        // destination: { parents: 0, interior: X1(Parachain(parachainId)) }
+        bytes memory destination = _encodeParachainDest(parachainId);
+
+        // XCM message: V3 ReserveAssetDeposited + ClearOrigin + BuyExecution + DepositAsset
+        bytes memory xcmMsg = _buildXCMTransfer(recipient, asset.amount, cfg.xcmRefTime, cfg.xcmProofSize);
+
+        try IXcmPrecompile(XCM_PRECOMPILE).xcmSend(destination, xcmMsg) {
+            _messages[messageId].status = MessageStatus.Executed;
+            emit XCMMessageExecuted(messageId, keccak256(xcmMsg), true);
+            emit MessageStatusUpdated(messageId, MessageStatus.Executed);
+        } catch {
+            // XCM dispatch failed — leave as Pending so relayer can retry or cancel
+            emit XCMMessageExecuted(messageId, keccak256(xcmMsg), false);
         }
 
-        bytes32 digest = _hashTypedDataV4(
-            keccak256(abi.encode(
-                XCM_INSTRUCTION_TYPEHASH,
-                instruction.destinationChainId,
-                instruction.sender,
-                instruction.recipient,
-                instruction.asset,
-                instruction.amount,
-                keccak256(instruction.callData),
-                instruction.weight,
-                instruction.transactWeight,
-                instruction.timeout
-            ))
+        emit XCMSent(messageId, destination, xcmMsg);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // SCALE encoding helpers
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * @dev Encode destination as SCALE VersionedMultiLocation V3:
+     *      { V3: { parents: 0, interior: X1(Parachain(id)) } }
+     *
+     * SCALE layout:
+     *   - enum index for V3 = 0x03
+     *   - parents: u8 = 0x00
+     *   - interior: enum Junctions = X1 = 0x01
+     *   - Junction::Parachain = 0x00, id: Compact<u32>
+     */
+    function _encodeParachainDest(uint32 parachainId) internal pure returns (bytes memory) {
+        return abi.encodePacked(
+            uint8(0x03),              // VersionedMultiLocation::V3
+            uint8(0x00),              // parents = 0
+            uint8(0x01),              // interior = X1
+            uint8(0x00),              // Junction::Parachain
+            _compactU32(parachainId)  // SCALE compact encoding of parachain id
+        );
+    }
+
+    /**
+     * @dev Build a minimal V3 XCM program for a reserve-backed transfer:
+     *
+     *   ReserveAssetDeposited([{ id: Concrete(Here), fun: Fungible(amount) }])
+     *   ClearOrigin
+     *   BuyExecution { fees: { id: Concrete(Here), fun: Fungible(amount/2) }, weight_limit: Unlimited }
+     *   DepositAsset { assets: Wild(AllCounted(1)), beneficiary: AccountKey20 { network: None, key: recipient } }
+     */
+    function _buildXCMTransfer(
+        address recipient,
+        uint128 amount,
+        uint64 /*refTime*/,
+        uint64 /*proofSize*/
+    ) internal pure returns (bytes memory) {
+        bytes memory asset = _encodeConcreteAsset(amount);
+        bytes memory feeAsset = _encodeConcreteAsset(amount / 2); // half for fees
+
+        bytes memory instructions = abi.encodePacked(
+            // Instruction 0: ReserveAssetDeposited (index 3 in XCM V3)
+            uint8(0x03),              // instruction index
+            uint8(0x04),              // vec len = 1 (compact)
+            asset,
+
+            // Instruction 1: ClearOrigin (index 4)
+            uint8(0x04),
+
+            // Instruction 2: BuyExecution (index 7)
+            uint8(0x07),
+            feeAsset,
+            uint8(0x00),              // WeightLimit::Unlimited
+
+            // Instruction 3: DepositAsset (index 8)
+            uint8(0x08),
+            uint8(0x01),              // AssetFilter::Wild
+            uint8(0x01),              // WildAsset::AllCounted
+            uint8(0x04),              // count = 1 (compact)
+            _encodeBeneficiary(recipient)
         );
 
-        address signer = digest.recover(signature);
-        if (signer != instruction.sender) revert("Invalid signature");
+        // XCM V3 envelope: enum VersionedXcm::V3 = 0x03, then SCALE vec of instructions
+        return abi.encodePacked(
+            uint8(0x03),              // VersionedXcm::V3
+            _compactU32(4),           // 4 instructions
+            instructions
+        );
+    }
 
-        message.status = MessageStatus.Executed;
-        _executedMessages[instruction.destinationChainId][messageId] = true;
+    /**
+     * @dev Encode a concrete asset at "Here" with a fungible amount.
+     *      MultiAsset { id: Concrete(MultiLocation { parents:0, interior:Here }), fun: Fungible(amount) }
+     */
+    function _encodeConcreteAsset(uint128 amount) internal pure returns (bytes memory) {
+        return abi.encodePacked(
+            uint8(0x00),  // AssetId::Concrete
+            uint8(0x00),  // parents = 0
+            uint8(0x00),  // interior = Here
+            uint8(0x01),  // Fungibility::Fungible
+            _compactU128(amount)
+        );
+    }
 
-        if (instruction.asset != address(0)) {
-            IERC20(instruction.asset).safeTransfer(instruction.recipient, instruction.amount);
-        } else {
-            (ParachainAsset[] memory assets, bytes memory originalCallData) = 
-                abi.decode(instruction.callData, (ParachainAsset[], bytes));
-            
-            for (uint i = 0; i < assets.length; i++) {
-                ParachainAsset memory asset = assets[i];
-                if (!asset.isNative) {
-                    address tokenAddress = _assetToToken[instruction.destinationChainId][asset.assetId];
-                    if (tokenAddress != address(0)) {
-                        IERC20(tokenAddress).safeTransfer(instruction.recipient, asset.amount);
-                    }
-                }
-            }
+    /**
+     * @dev Encode beneficiary as AccountKey20 (20-byte Ethereum address).
+     *      MultiLocation { parents: 0, interior: X1(AccountKey20 { network: None, key: addr }) }
+     */
+    function _encodeBeneficiary(address addr) internal pure returns (bytes memory) {
+        return abi.encodePacked(
+            uint8(0x00),  // parents = 0
+            uint8(0x01),  // interior = X1
+            uint8(0x03),  // Junction::AccountKey20
+            uint8(0x00),  // NetworkId::None
+            addr          // 20 bytes
+        );
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // SCALE compact integer encoding
+    // ─────────────────────────────────────────────────────────────────────────
+
+    function _compactU32(uint32 v) internal pure returns (bytes memory) {
+        if (v < 64)          return abi.encodePacked(uint8(v << 2));
+        if (v < 16384)       return abi.encodePacked(uint16((uint16(v) << 2) | 0x01));
+        if (v < 1073741824)  return abi.encodePacked(uint32((uint32(v) << 2) | 0x02));
+        // big-integer mode (rare for parachain IDs)
+        return abi.encodePacked(uint8(0x03), uint32(v));
+    }
+
+    function _compactU128(uint128 v) internal pure returns (bytes memory) {
+        if (v < 64)                       return abi.encodePacked(uint8(uint8(v) << 2));
+        if (v < 16384)                    return abi.encodePacked(uint16((uint16(v) << 2) | 0x01));
+        if (v < 1_073_741_824)            return abi.encodePacked(uint32((uint32(v) << 2) | 0x02));
+        // big-integer mode: prefix byte = (bytes_needed - 4) << 2 | 0x03
+        // For simplicity encode as 16-byte big-int (handles all uint128)
+        uint8 mode = (16 - 4) << 2 | 0x03; // = 0x33
+        return abi.encodePacked(mode, _u128ToLEBytes(v));
+    }
+
+    function _u128ToLEBytes(uint128 v) internal pure returns (bytes memory out) {
+        out = new bytes(16);
+        for (uint i = 0; i < 16; i++) {
+            out[i] = bytes1(uint8(v >> (i * 8)));
         }
-
-        emit XCMMessageExecuted(messageId, bytes32(0), true);
-        emit MessageStatusUpdated(messageId, MessageStatus.Executed);
-
-        return (true, abi.encode(instruction.recipient, instruction.amount));
     }
 
-    function mapAsset(
-        uint32 chainId,
-        bytes32 assetId,
-        address tokenAddress,
-        uint8 decimals,
-        bool isNative
-    ) external onlyRole(CONFIGURATOR_ROLE) {
-        if (tokenAddress == address(0) && !isNative) revert("Invalid token address");
-        if (_assetToToken[chainId][assetId] != address(0)) revert("Asset already mapped");
-        
-        _assetToToken[chainId][assetId] = tokenAddress;
-        _tokenToAsset[tokenAddress][chainId] = AssetMapping({
-            assetId: assetId,
-            tokenAddress: tokenAddress,
-            decimals: decimals,
-            isNative: isNative,
-            exists: true
-        });
-        
-        _chainAssets[chainId].add(assetId);
-        
-        emit AssetMapped(chainId, assetId, tokenAddress, decimals, isNative);
-    }
-
-    function unmapAsset(uint32 chainId, bytes32 assetId) external onlyRole(CONFIGURATOR_ROLE) {
-        address tokenAddress = _assetToToken[chainId][assetId];
-        if (tokenAddress == address(0) && !_tokenToAsset[address(0)][chainId].exists) {
-            revert("Asset not mapped");
-        }
-        
-        delete _assetToToken[chainId][assetId];
-        if (tokenAddress != address(0)) {
-            delete _tokenToAsset[tokenAddress][chainId];
-        } else {
-            delete _tokenToAsset[address(0)][chainId];
-        }
-        
-        _chainAssets[chainId].remove(assetId);
-        
-        emit AssetUnmapped(chainId, assetId, tokenAddress);
-    }
-
-    function getTokenForAsset(uint32 chainId, bytes32 assetId) external view returns (address) {
-        return _assetToToken[chainId][assetId];
-    }
-
-    function getAssetForToken(address token, uint32 chainId) external view returns (bytes32 assetId, bool exists) {
-        AssetMapping storage mapping_ = _tokenToAsset[token][chainId];
-        return (mapping_.assetId, mapping_.exists);
-    }
-
-    function getChainAssets(uint32 chainId) external view returns (bytes32[] memory) {
-        return _chainAssets[chainId].values();
-    }
-
-    function verifyXCM(
-        bytes32 messageId,
-        bytes calldata proof
-    ) external view override returns (bool isValid, bytes memory decodedMessage) {
-        Message storage message = _messages[messageId];
-        if (message.id == bytes32(0)) return (false, "");
-
-        bytes32 proofHash = keccak256(proof);
-        isValid = (proofHash == message.hash);
-        
-        if (isValid) {
-            decodedMessage = abi.encode(
-                message.sender,
-                message.recipient,
-                message.asset,
-                message.amount,
-                message.callData
-            );
-        }
-
-        return (isValid, decodedMessage);
-    }
-
-    function getMessageStatus(bytes32 messageId) external view override returns (MessageStatus) {
-        return _messages[messageId].status;
-    }
-
-    function getMessageDetails(bytes32 messageId) external view override returns (XCMMessage memory) {
+    // ─────────────────────────────────────────────────────────────────────────
+    // relayer: mark a message executed (after confirming on destination)
+    // ─────────────────────────────────────────────────────────────────────────
+    function markExecuted(bytes32 messageId) external onlyRole(RELAYER_ROLE) {
         Message storage m = _messages[messageId];
-        return XCMMessage({
-            id: m.id,
-            sourceChainId: m.sourceChainId,
-            destinationChainId: m.destinationChainId,
-            sender: m.sender,
-            recipient: m.recipient,
-            asset: m.asset,
-            amount: m.amount,
-            timestamp: m.timestamp,
-            timeout: m.timeout,
-            hash: m.hash,
-            status: m.status
-        });
+        require(m.id != bytes32(0),               "Not found");
+        require(m.status == MessageStatus.Pending, "Not pending");
+        m.status = MessageStatus.Executed;
+        emit MessageStatusUpdated(messageId, MessageStatus.Executed);
     }
 
-    function calculateFee(
-        uint32 destinationChainId,
-        uint64 weight,
-        uint256 amount
-    ) public view override returns (uint256 fee) {
-        return _calculateFee(destinationChainId, weight, amount);
-    }
-
-    function cancelMessage(bytes32 messageId) external override returns (bool success) {
-        Message storage message = _messages[messageId];
-        if (message.sender != msg.sender && !hasRole(RELAYER_ROLE, msg.sender)) {
-            revert("Not authorized");
-        }
-        if (message.status != MessageStatus.Pending) revert("Cannot cancel");
-        if (block.timestamp > message.timestamp + message.timeout) {
-            message.status = MessageStatus.Expired;
+    // ─────────────────────────────────────────────────────────────────────────
+    // Cancel / expiry
+    // ─────────────────────────────────────────────────────────────────────────
+    function cancelMessage(bytes32 messageId) external override returns (bool) {
+        Message storage m = _messages[messageId];
+        require(m.sender == msg.sender || hasRole(RELAYER_ROLE, msg.sender), "Not authorized");
+        require(m.status == MessageStatus.Pending, "Cannot cancel");
+        if (block.timestamp > m.timestamp + m.timeout) {
+            m.status = MessageStatus.Expired;
             revert MessageExpired(messageId);
         }
-
-        message.status = MessageStatus.Cancelled;
-
-        if (message.asset != address(0)) {
-            IERC20(message.asset).safeTransfer(message.sender, message.amount);
-        } else {
-            (ParachainAsset[] memory assets,) = abi.decode(message.callData, (ParachainAsset[], bytes));
-            for (uint i = 0; i < assets.length; i++) {
-                if (!assets[i].isNative) {
-                    address tokenAddress = _assetToToken[message.destinationChainId][assets[i].assetId];
-                    if (tokenAddress != address(0)) {
-                        IERC20(tokenAddress).safeTransfer(message.sender, assets[i].amount);
-                    }
-                }
-            }
+        m.status = MessageStatus.Cancelled;
+        if (m.asset != address(0)) {
+            IERC20(m.asset).safeTransfer(m.sender, m.amount);
         }
-
         emit XCMMessageCancelled(messageId);
         emit MessageStatusUpdated(messageId, MessageStatus.Cancelled);
-
         return true;
     }
 
-    function processExpiredMessages(bytes32[] calldata messageIds) external override onlyRole(RELAYER_ROLE) {
-        for (uint i = 0; i < messageIds.length; i++) {
-            Message storage message = _messages[messageIds[i]];
-            if (message.status == MessageStatus.Pending && 
-                block.timestamp > message.timestamp + message.timeout) {
-                message.status = MessageStatus.Expired;
-                emit XCMMessageExpired(messageIds[i]);
-                emit MessageStatusUpdated(messageIds[i], MessageStatus.Expired);
+    function processExpiredMessages(bytes32[] calldata ids) external onlyRole(RELAYER_ROLE) {
+        for (uint i = 0; i < ids.length; i++) {
+            Message storage m = _messages[ids[i]];
+            if (m.status == MessageStatus.Pending &&
+                block.timestamp > m.timestamp + m.timeout) {
+                m.status = MessageStatus.Expired;
+                emit XCMMessageExpired(ids[i]);
+                emit MessageStatusUpdated(ids[i], MessageStatus.Expired);
             }
         }
     }
 
-    function _calculateFee(
-        uint32 destinationChainId,
-        uint64 weight,
-        uint256 /* amount */
-    ) private view returns (uint256) {
-        ChainConfig storage config = _chainConfigs[destinationChainId];
-        if (!config.isActive) return type(uint256).max;
-
-        uint256 weightFee = (config.weightFee * weight) / WEIGHT_DENOMINATOR;
-        uint256 totalFee = config.baseFee + weightFee;
-        
-        if (totalFee < config.minFee) {
-            totalFee = config.minFee;
-        }
-
-        return totalFee;
-    }
-
-    function _generateMessageId(
-        address sender,
-        address recipient,
-        address asset,
-        uint256 amount,
-        uint32 destinationChainId,
-        uint256 nonce
-    ) private view returns (bytes32) {
-        return keccak256(
-            abi.encodePacked(
-                sender,
-                recipient,
-                asset,
-                amount,
-                destinationChainId,
-                block.chainid,
-                nonce,
-                block.timestamp
-            )
-        );
-    }
-
-    function _hashInstruction(XCMInstruction memory instruction) private pure returns (bytes32) {
-        return keccak256(
-            abi.encode(
-                instruction.destinationChainId,
-                instruction.sender,
-                instruction.recipient,
-                instruction.asset,
-                instruction.amount,
-                keccak256(instruction.callData),
-                instruction.weight,
-                instruction.transactWeight,
-                instruction.timeout
-            )
-        );
-    }
-
-    function _calculateParachainWeight(
-        uint256 assetsLength,
-        uint256 callDataLength
-    ) private pure returns (uint64) {
-        uint64 baseWeight = 100000000;
-        uint64 assetWeight = uint64(assetsLength) * 1000000;
-        uint64 dataWeight = uint64(callDataLength) * 100;
-        return baseWeight + assetWeight + dataWeight;
-    }
-
+    // ─────────────────────────────────────────────────────────────────────────
+    // Configuration
+    // ─────────────────────────────────────────────────────────────────────────
     function configureChain(
-        uint32 chainId,
-        string calldata name,
+        uint32  chainId,
+        string  calldata name,
         uint256 baseFee,
         uint256 weightFee,
         uint256 minFee,
-        uint64 maxWeight,
-        address gateway,
-        bytes32 genesisHash
+        uint64  maxWeight,
+        uint64  xcmRefTime,
+        uint64  xcmProofSize
     ) external onlyRole(CONFIGURATOR_ROLE) {
-        if (gateway == address(0)) revert("Invalid gateway");
-        if (maxWeight > MAX_WEIGHT) revert("Max weight too high");
-
+        require(maxWeight <= MAX_WEIGHT, "Max weight too high");
         _chainConfigs[chainId] = ChainConfig({
-            chainId: chainId,
-            name: name,
-            baseFee: baseFee,
-            weightFee: weightFee,
-            minFee: minFee,
-            maxWeight: maxWeight,
-            gateway: gateway,
-            genesisHash: genesisHash,
-            isActive: true
+            chainId:      chainId,
+            name:         name,
+            baseFee:      baseFee,
+            weightFee:    weightFee,
+            minFee:       minFee,
+            maxWeight:    maxWeight,
+            isActive:     true,
+            xcmRefTime:   xcmRefTime,
+            xcmProofSize: xcmProofSize
         });
-
-        emit ChainConfigured(chainId, name, gateway, baseFee);
+        emit ChainConfigured(chainId, name, baseFee);
     }
 
     function deactivateChain(uint32 chainId) external onlyRole(CONFIGURATOR_ROLE) {
@@ -534,15 +406,91 @@ contract CrossChainExecutor is AccessControl, ReentrancyGuard, EIP712, IXCM {
         emit ChainDeactivated(chainId);
     }
 
+    function mapAsset(
+        uint32  chainId,
+        bytes32 assetId,
+        address tokenAddress,
+        uint8   decimals,
+        bool    isNative
+    ) external onlyRole(CONFIGURATOR_ROLE) {
+        require(tokenAddress != address(0) || isNative, "Invalid token");
+        require(_assetToToken[chainId][assetId] == address(0), "Already mapped");
+        _assetToToken[chainId][assetId] = tokenAddress;
+        _tokenToAsset[tokenAddress][chainId] = AssetMapping({
+            assetId: assetId, tokenAddress: tokenAddress,
+            decimals: decimals, isNative: isNative, exists: true
+        });
+        _chainAssets[chainId].add(assetId);
+        emit AssetMapped(chainId, assetId, tokenAddress, decimals, isNative);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Views
+    // ─────────────────────────────────────────────────────────────────────────
+    function getMessageStatus(bytes32 messageId) external view override returns (MessageStatus) {
+        return _messages[messageId].status;
+    }
+
+    function getMessageDetails(bytes32 messageId) external view override returns (XCMMessage memory) {
+        Message storage m = _messages[messageId];
+        return XCMMessage({
+            id: m.id, sourceChainId: m.sourceChainId,
+            destinationChainId: m.destinationChainId,
+            sender: m.sender, recipient: m.recipient,
+            asset: m.asset, amount: m.amount,
+            timestamp: m.timestamp, timeout: m.timeout,
+            hash: keccak256(abi.encode(m.id, m.amount)), status: m.status
+        });
+    }
+
+    function calculateFee(uint32 chainId, uint64 weight, uint256 amount) external view override returns (uint256) {
+        return _calcFee(chainId, weight, amount);
+    }
+
     function getChainConfig(uint32 chainId) external view returns (ChainConfig memory) {
         return _chainConfigs[chainId];
     }
 
-    function getNonce(address sender, uint32 destinationChainId) external view returns (uint256) {
-        return _nonces[sender][destinationChainId];
+    function getNonce(address sender, uint32 chainId) external view returns (uint256) {
+        return _nonces[sender][chainId];
     }
 
-    function getChainAssetCount(uint32 chainId) external view returns (uint256) {
-        return _chainAssets[chainId].length();
+    function getTokenForAsset(uint32 chainId, bytes32 assetId) external view returns (address) {
+        return _assetToToken[chainId][assetId];
+    }
+
+    function estimateXCMWeight(uint32 parachainId, uint128 amount) external view returns (IXcmPrecompile.Weight memory) {
+        ChainConfig storage cfg = _chainConfigs[parachainId];
+        // Build a dummy message and call weighMessage on precompile
+        bytes memory xcmMsg = _buildXCMTransfer(address(this), amount, cfg.xcmRefTime, cfg.xcmProofSize);
+        try IXcmPrecompile(XCM_PRECOMPILE).weighMessage(xcmMsg) returns (IXcmPrecompile.Weight memory w) {
+            return w;
+        } catch {
+            return IXcmPrecompile.Weight({ refTime: cfg.xcmRefTime, proofSize: cfg.xcmProofSize });
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Internal helpers
+    // ─────────────────────────────────────────────────────────────────────────
+    function _calcFee(uint32 chainId, uint64 weight, uint256 /*amount*/) internal view returns (uint256) {
+        ChainConfig storage c = _chainConfigs[chainId];
+        if (!c.isActive) return type(uint256).max;
+        uint256 total = c.baseFee + (c.weightFee * weight) / WEIGHT_DENOM;
+        return total < c.minFee ? c.minFee : total;
+    }
+
+    function _calcWeight(uint256 assetCount) internal pure returns (uint64) {
+        return uint64(100_000_000 + assetCount * 1_000_000);
+    }
+
+    function _makeMessageId(
+        address sender, address recipient, address asset,
+        uint256 amount, uint32 destChain, uint256 nonce
+    ) internal view returns (bytes32) {
+        return keccak256(abi.encodePacked(
+            sender, recipient, asset, amount, destChain,
+            block.chainid, nonce, block.timestamp
+        ));
     }
 }

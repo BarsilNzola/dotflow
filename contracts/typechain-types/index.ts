@@ -52,8 +52,6 @@ export type { IUniswapV2Factory } from "./contracts/adapters/UniswapV2Adapter.so
 export { IUniswapV2Factory__factory } from "./factories/contracts/adapters/UniswapV2Adapter.sol/IUniswapV2Factory__factory";
 export type { IUniswapV2Pair } from "./contracts/adapters/UniswapV2Adapter.sol/IUniswapV2Pair";
 export { IUniswapV2Pair__factory } from "./factories/contracts/adapters/UniswapV2Adapter.sol/IUniswapV2Pair__factory";
-export type { IUniswapV2Router } from "./contracts/adapters/UniswapV2Adapter.sol/IUniswapV2Router";
-export { IUniswapV2Router__factory } from "./factories/contracts/adapters/UniswapV2Adapter.sol/IUniswapV2Router__factory";
 export type { UniswapV2Adapter } from "./contracts/adapters/UniswapV2Adapter.sol/UniswapV2Adapter";
 export { UniswapV2Adapter__factory } from "./factories/contracts/adapters/UniswapV2Adapter.sol/UniswapV2Adapter__factory";
 export type { CrossChainExecutor } from "./contracts/core/CrossChainExecutor";
@@ -66,5 +64,15 @@ export type { ILiquidityAdapter } from "./contracts/interfaces/ILiquidityAdapter
 export { ILiquidityAdapter__factory } from "./factories/contracts/interfaces/ILiquidityAdapter__factory";
 export type { IXCM } from "./contracts/interfaces/IXCM";
 export { IXCM__factory } from "./factories/contracts/interfaces/IXCM__factory";
+export type { IXcmPrecompile } from "./contracts/interfaces/IXcmPrecompile";
+export { IXcmPrecompile__factory } from "./factories/contracts/interfaces/IXcmPrecompile__factory";
 export type { MockERC20 } from "./contracts/mocks/MockERC20";
 export { MockERC20__factory } from "./factories/contracts/mocks/MockERC20__factory";
+export type { MockUniswapV2Factory } from "./contracts/mocks/MockUniswapV2.sol/MockUniswapV2Factory";
+export { MockUniswapV2Factory__factory } from "./factories/contracts/mocks/MockUniswapV2.sol/MockUniswapV2Factory__factory";
+export type { MockUniswapV2Pair } from "./contracts/mocks/MockUniswapV2.sol/MockUniswapV2Pair";
+export { MockUniswapV2Pair__factory } from "./factories/contracts/mocks/MockUniswapV2.sol/MockUniswapV2Pair__factory";
+export type { MockUniswapV2Router } from "./contracts/mocks/MockUniswapV2.sol/MockUniswapV2Router";
+export { MockUniswapV2Router__factory } from "./factories/contracts/mocks/MockUniswapV2.sol/MockUniswapV2Router__factory";
+export type { MockXcmPrecompile } from "./contracts/mocks/MockXcmPrecompile";
+export { MockXcmPrecompile__factory } from "./factories/contracts/mocks/MockXcmPrecompile__factory";

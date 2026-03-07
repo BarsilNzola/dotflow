@@ -75,40 +75,6 @@ export declare namespace IXCM {
     amount: bigint,
     isNative: boolean
   ] & { assetId: string; amount: bigint; isNative: boolean };
-
-  export type XCMInstructionStruct = {
-    destinationChainId: BigNumberish;
-    sender: AddressLike;
-    recipient: AddressLike;
-    asset: AddressLike;
-    amount: BigNumberish;
-    callData: BytesLike;
-    weight: BigNumberish;
-    transactWeight: BigNumberish;
-    timeout: BigNumberish;
-  };
-
-  export type XCMInstructionStructOutput = [
-    destinationChainId: bigint,
-    sender: string,
-    recipient: string,
-    asset: string,
-    amount: bigint,
-    callData: string,
-    weight: bigint,
-    transactWeight: bigint,
-    timeout: bigint
-  ] & {
-    destinationChainId: bigint;
-    sender: string;
-    recipient: string;
-    asset: string;
-    amount: bigint;
-    callData: string;
-    weight: bigint;
-    transactWeight: bigint;
-    timeout: bigint;
-  };
 }
 
 export interface IXCMInterface extends Interface {
@@ -116,13 +82,9 @@ export interface IXCMInterface extends Interface {
     nameOrSignature:
       | "calculateFee"
       | "cancelMessage"
-      | "executeXCM"
       | "getMessageDetails"
       | "getMessageStatus"
-      | "processExpiredMessages"
       | "sendParachainAssets"
-      | "sendXCM"
-      | "verifyXCM"
   ): FunctionFragment;
 
   getEvent(
@@ -130,8 +92,8 @@ export interface IXCMInterface extends Interface {
       | "XCMMessageCancelled"
       | "XCMMessageExecuted"
       | "XCMMessageExpired"
-      | "XCMMessageFailed"
       | "XCMMessagePrepared"
+      | "XCMSent"
   ): EventFragment;
 
   encodeFunctionData(
@@ -143,20 +105,12 @@ export interface IXCMInterface extends Interface {
     values: [BytesLike]
   ): string;
   encodeFunctionData(
-    functionFragment: "executeXCM",
-    values: [BytesLike, BytesLike]
-  ): string;
-  encodeFunctionData(
     functionFragment: "getMessageDetails",
     values: [BytesLike]
   ): string;
   encodeFunctionData(
     functionFragment: "getMessageStatus",
     values: [BytesLike]
-  ): string;
-  encodeFunctionData(
-    functionFragment: "processExpiredMessages",
-    values: [BytesLike[]]
   ): string;
   encodeFunctionData(
     functionFragment: "sendParachainAssets",
@@ -168,14 +122,6 @@ export interface IXCMInterface extends Interface {
       BigNumberish
     ]
   ): string;
-  encodeFunctionData(
-    functionFragment: "sendXCM",
-    values: [IXCM.XCMInstructionStruct]
-  ): string;
-  encodeFunctionData(
-    functionFragment: "verifyXCM",
-    values: [BytesLike, BytesLike]
-  ): string;
 
   decodeFunctionResult(
     functionFragment: "calculateFee",
@@ -185,7 +131,6 @@ export interface IXCMInterface extends Interface {
     functionFragment: "cancelMessage",
     data: BytesLike
   ): Result;
-  decodeFunctionResult(functionFragment: "executeXCM", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "getMessageDetails",
     data: BytesLike
@@ -195,15 +140,9 @@ export interface IXCMInterface extends Interface {
     data: BytesLike
   ): Result;
   decodeFunctionResult(
-    functionFragment: "processExpiredMessages",
-    data: BytesLike
-  ): Result;
-  decodeFunctionResult(
     functionFragment: "sendParachainAssets",
     data: BytesLike
   ): Result;
-  decodeFunctionResult(functionFragment: "sendXCM", data: BytesLike): Result;
-  decodeFunctionResult(functionFragment: "verifyXCM", data: BytesLike): Result;
 }
 
 export namespace XCMMessageCancelledEvent {
@@ -221,17 +160,17 @@ export namespace XCMMessageCancelledEvent {
 export namespace XCMMessageExecutedEvent {
   export type InputTuple = [
     messageId: BytesLike,
-    transactionHash: BytesLike,
+    xcmHash: BytesLike,
     success: boolean
   ];
   export type OutputTuple = [
     messageId: string,
-    transactionHash: string,
+    xcmHash: string,
     success: boolean
   ];
   export interface OutputObject {
     messageId: string;
-    transactionHash: string;
+    xcmHash: string;
     success: boolean;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
@@ -245,19 +184,6 @@ export namespace XCMMessageExpiredEvent {
   export type OutputTuple = [messageId: string];
   export interface OutputObject {
     messageId: string;
-  }
-  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
-  export type Filter = TypedDeferredTopicFilter<Event>;
-  export type Log = TypedEventLog<Event>;
-  export type LogDescription = TypedLogDescription<Event>;
-}
-
-export namespace XCMMessageFailedEvent {
-  export type InputTuple = [messageId: BytesLike, reason: BytesLike];
-  export type OutputTuple = [messageId: string, reason: string];
-  export interface OutputObject {
-    messageId: string;
-    reason: string;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
   export type Filter = TypedDeferredTopicFilter<Event>;
@@ -292,6 +218,28 @@ export namespace XCMMessagePreparedEvent {
     asset: string;
     amount: bigint;
     timeout: bigint;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
+export namespace XCMSentEvent {
+  export type InputTuple = [
+    messageId: BytesLike,
+    destination: BytesLike,
+    xcmMessage: BytesLike
+  ];
+  export type OutputTuple = [
+    messageId: string,
+    destination: string,
+    xcmMessage: string
+  ];
+  export interface OutputObject {
+    messageId: string;
+    destination: string;
+    xcmMessage: string;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
   export type Filter = TypedDeferredTopicFilter<Event>;
@@ -358,12 +306,6 @@ export interface IXCM extends BaseContract {
     "nonpayable"
   >;
 
-  executeXCM: TypedContractMethod<
-    [encodedMessage: BytesLike, signature: BytesLike],
-    [[boolean, string] & { success: boolean; result: string }],
-    "nonpayable"
-  >;
-
   getMessageDetails: TypedContractMethod<
     [messageId: BytesLike],
     [IXCM.XCMMessageStructOutput],
@@ -376,12 +318,6 @@ export interface IXCM extends BaseContract {
     "view"
   >;
 
-  processExpiredMessages: TypedContractMethod<
-    [messageIds: BytesLike[]],
-    [void],
-    "nonpayable"
-  >;
-
   sendParachainAssets: TypedContractMethod<
     [
       parachainId: BigNumberish,
@@ -392,18 +328,6 @@ export interface IXCM extends BaseContract {
     ],
     [string],
     "payable"
-  >;
-
-  sendXCM: TypedContractMethod<
-    [instruction: IXCM.XCMInstructionStruct],
-    [string],
-    "payable"
-  >;
-
-  verifyXCM: TypedContractMethod<
-    [messageId: BytesLike, proof: BytesLike],
-    [[boolean, string] & { isValid: boolean; decodedMessage: string }],
-    "view"
   >;
 
   getFunction<T extends ContractMethod = ContractMethod>(
@@ -425,13 +349,6 @@ export interface IXCM extends BaseContract {
     nameOrSignature: "cancelMessage"
   ): TypedContractMethod<[messageId: BytesLike], [boolean], "nonpayable">;
   getFunction(
-    nameOrSignature: "executeXCM"
-  ): TypedContractMethod<
-    [encodedMessage: BytesLike, signature: BytesLike],
-    [[boolean, string] & { success: boolean; result: string }],
-    "nonpayable"
-  >;
-  getFunction(
     nameOrSignature: "getMessageDetails"
   ): TypedContractMethod<
     [messageId: BytesLike],
@@ -441,9 +358,6 @@ export interface IXCM extends BaseContract {
   getFunction(
     nameOrSignature: "getMessageStatus"
   ): TypedContractMethod<[messageId: BytesLike], [bigint], "view">;
-  getFunction(
-    nameOrSignature: "processExpiredMessages"
-  ): TypedContractMethod<[messageIds: BytesLike[]], [void], "nonpayable">;
   getFunction(
     nameOrSignature: "sendParachainAssets"
   ): TypedContractMethod<
@@ -456,20 +370,6 @@ export interface IXCM extends BaseContract {
     ],
     [string],
     "payable"
-  >;
-  getFunction(
-    nameOrSignature: "sendXCM"
-  ): TypedContractMethod<
-    [instruction: IXCM.XCMInstructionStruct],
-    [string],
-    "payable"
-  >;
-  getFunction(
-    nameOrSignature: "verifyXCM"
-  ): TypedContractMethod<
-    [messageId: BytesLike, proof: BytesLike],
-    [[boolean, string] & { isValid: boolean; decodedMessage: string }],
-    "view"
   >;
 
   getEvent(
@@ -494,18 +394,18 @@ export interface IXCM extends BaseContract {
     XCMMessageExpiredEvent.OutputObject
   >;
   getEvent(
-    key: "XCMMessageFailed"
-  ): TypedContractEvent<
-    XCMMessageFailedEvent.InputTuple,
-    XCMMessageFailedEvent.OutputTuple,
-    XCMMessageFailedEvent.OutputObject
-  >;
-  getEvent(
     key: "XCMMessagePrepared"
   ): TypedContractEvent<
     XCMMessagePreparedEvent.InputTuple,
     XCMMessagePreparedEvent.OutputTuple,
     XCMMessagePreparedEvent.OutputObject
+  >;
+  getEvent(
+    key: "XCMSent"
+  ): TypedContractEvent<
+    XCMSentEvent.InputTuple,
+    XCMSentEvent.OutputTuple,
+    XCMSentEvent.OutputObject
   >;
 
   filters: {
@@ -542,18 +442,7 @@ export interface IXCM extends BaseContract {
       XCMMessageExpiredEvent.OutputObject
     >;
 
-    "XCMMessageFailed(bytes32,bytes)": TypedContractEvent<
-      XCMMessageFailedEvent.InputTuple,
-      XCMMessageFailedEvent.OutputTuple,
-      XCMMessageFailedEvent.OutputObject
-    >;
-    XCMMessageFailed: TypedContractEvent<
-      XCMMessageFailedEvent.InputTuple,
-      XCMMessageFailedEvent.OutputTuple,
-      XCMMessageFailedEvent.OutputObject
-    >;
-
-    "XCMMessagePrepared(bytes32,uint32,address,address,address,uint256,uint64)": TypedContractEvent<
+    "XCMMessagePrepared(bytes32,uint32,address,address,address,uint128,uint64)": TypedContractEvent<
       XCMMessagePreparedEvent.InputTuple,
       XCMMessagePreparedEvent.OutputTuple,
       XCMMessagePreparedEvent.OutputObject
@@ -562,6 +451,17 @@ export interface IXCM extends BaseContract {
       XCMMessagePreparedEvent.InputTuple,
       XCMMessagePreparedEvent.OutputTuple,
       XCMMessagePreparedEvent.OutputObject
+    >;
+
+    "XCMSent(bytes32,bytes,bytes)": TypedContractEvent<
+      XCMSentEvent.InputTuple,
+      XCMSentEvent.OutputTuple,
+      XCMSentEvent.OutputObject
+    >;
+    XCMSent: TypedContractEvent<
+      XCMSentEvent.InputTuple,
+      XCMSentEvent.OutputTuple,
+      XCMSentEvent.OutputObject
     >;
   };
 }

@@ -3,5 +3,4 @@
 /* eslint-disable */
 export type { IUniswapV2Factory } from "./IUniswapV2Factory";
 export type { IUniswapV2Pair } from "./IUniswapV2Pair";
-export type { IUniswapV2Router } from "./IUniswapV2Router";
 export type { UniswapV2Adapter } from "./UniswapV2Adapter";

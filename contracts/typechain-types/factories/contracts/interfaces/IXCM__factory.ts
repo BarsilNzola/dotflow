@@ -7,11 +7,6 @@ import type { IXCM, IXCMInterface } from "../../../contracts/interfaces/IXCM";
 
 const _abi = [
   {
-    inputs: [],
-    name: "AssetTransferFailed",
-    type: "error",
-  },
-  {
     inputs: [
       {
         internalType: "uint32",
@@ -99,9 +94,9 @@ const _abi = [
         type: "bytes32",
       },
       {
-        indexed: true,
+        indexed: false,
         internalType: "bytes32",
-        name: "transactionHash",
+        name: "xcmHash",
         type: "bytes32",
       },
       {
@@ -125,25 +120,6 @@ const _abi = [
       },
     ],
     name: "XCMMessageExpired",
-    type: "event",
-  },
-  {
-    anonymous: false,
-    inputs: [
-      {
-        indexed: true,
-        internalType: "bytes32",
-        name: "messageId",
-        type: "bytes32",
-      },
-      {
-        indexed: false,
-        internalType: "bytes",
-        name: "reason",
-        type: "bytes",
-      },
-    ],
-    name: "XCMMessageFailed",
     type: "event",
   },
   {
@@ -181,9 +157,9 @@ const _abi = [
       },
       {
         indexed: false,
-        internalType: "uint256",
+        internalType: "uint128",
         name: "amount",
-        type: "uint256",
+        type: "uint128",
       },
       {
         indexed: false,
@@ -193,6 +169,31 @@ const _abi = [
       },
     ],
     name: "XCMMessagePrepared",
+    type: "event",
+  },
+  {
+    anonymous: false,
+    inputs: [
+      {
+        indexed: true,
+        internalType: "bytes32",
+        name: "messageId",
+        type: "bytes32",
+      },
+      {
+        indexed: false,
+        internalType: "bytes",
+        name: "destination",
+        type: "bytes",
+      },
+      {
+        indexed: false,
+        internalType: "bytes",
+        name: "xcmMessage",
+        type: "bytes",
+      },
+    ],
+    name: "XCMSent",
     type: "event",
   },
   {
@@ -217,7 +218,7 @@ const _abi = [
     outputs: [
       {
         internalType: "uint256",
-        name: "fee",
+        name: "",
         type: "uint256",
       },
     ],
@@ -236,37 +237,8 @@ const _abi = [
     outputs: [
       {
         internalType: "bool",
-        name: "success",
+        name: "",
         type: "bool",
-      },
-    ],
-    stateMutability: "nonpayable",
-    type: "function",
-  },
-  {
-    inputs: [
-      {
-        internalType: "bytes",
-        name: "encodedMessage",
-        type: "bytes",
-      },
-      {
-        internalType: "bytes",
-        name: "signature",
-        type: "bytes",
-      },
-    ],
-    name: "executeXCM",
-    outputs: [
-      {
-        internalType: "bool",
-        name: "success",
-        type: "bool",
-      },
-      {
-        internalType: "bytes",
-        name: "result",
-        type: "bytes",
       },
     ],
     stateMutability: "nonpayable",
@@ -370,19 +342,6 @@ const _abi = [
   {
     inputs: [
       {
-        internalType: "bytes32[]",
-        name: "messageIds",
-        type: "bytes32[]",
-      },
-    ],
-    name: "processExpiredMessages",
-    outputs: [],
-    stateMutability: "nonpayable",
-    type: "function",
-  },
-  {
-    inputs: [
-      {
         internalType: "uint32",
         name: "parachainId",
         type: "uint32",
@@ -434,101 +393,6 @@ const _abi = [
       },
     ],
     stateMutability: "payable",
-    type: "function",
-  },
-  {
-    inputs: [
-      {
-        components: [
-          {
-            internalType: "uint32",
-            name: "destinationChainId",
-            type: "uint32",
-          },
-          {
-            internalType: "address",
-            name: "sender",
-            type: "address",
-          },
-          {
-            internalType: "address",
-            name: "recipient",
-            type: "address",
-          },
-          {
-            internalType: "address",
-            name: "asset",
-            type: "address",
-          },
-          {
-            internalType: "uint128",
-            name: "amount",
-            type: "uint128",
-          },
-          {
-            internalType: "bytes",
-            name: "callData",
-            type: "bytes",
-          },
-          {
-            internalType: "uint64",
-            name: "weight",
-            type: "uint64",
-          },
-          {
-            internalType: "uint128",
-            name: "transactWeight",
-            type: "uint128",
-          },
-          {
-            internalType: "uint64",
-            name: "timeout",
-            type: "uint64",
-          },
-        ],
-        internalType: "struct IXCM.XCMInstruction",
-        name: "instruction",
-        type: "tuple",
-      },
-    ],
-    name: "sendXCM",
-    outputs: [
-      {
-        internalType: "bytes32",
-        name: "messageId",
-        type: "bytes32",
-      },
-    ],
-    stateMutability: "payable",
-    type: "function",
-  },
-  {
-    inputs: [
-      {
-        internalType: "bytes32",
-        name: "messageId",
-        type: "bytes32",
-      },
-      {
-        internalType: "bytes",
-        name: "proof",
-        type: "bytes",
-      },
-    ],
-    name: "verifyXCM",
-    outputs: [
-      {
-        internalType: "bool",
-        name: "isValid",
-        type: "bool",
-      },
-      {
-        internalType: "bytes",
-        name: "decodedMessage",
-        type: "bytes",
-      },
-    ],
-    stateMutability: "view",
     type: "function",
   },
 ] as const;

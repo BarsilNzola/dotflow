@@ -46,7 +46,7 @@ const config: HardhatUserConfig = {
     westend: {
       url: process.env.RPC_WESTEND || "",
       accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
-      chainId: 420,
+      chainId: 420420421,
       gasPrice: "auto"
     }
   },

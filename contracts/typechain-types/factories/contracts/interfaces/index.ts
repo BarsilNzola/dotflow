@@ -3,3 +3,4 @@
 /* eslint-disable */
 export { ILiquidityAdapter__factory } from "./ILiquidityAdapter__factory";
 export { IXCM__factory } from "./IXCM__factory";
+export { IXcmPrecompile__factory } from "./IXcmPrecompile__factory";

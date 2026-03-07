@@ -15,9 +15,9 @@ contract DotFlowRouter is AccessControl, ReentrancyGuard, Pausable {
     using EnumerableSet for EnumerableSet.AddressSet;
     using EnumerableSet for EnumerableSet.Bytes32Set;
 
-    bytes32 public constant ROUTER_ADMIN = keccak256("ROUTER_ADMIN");
+    bytes32 public constant ROUTER_ADMIN      = keccak256("ROUTER_ADMIN");
     bytes32 public constant LIQUIDITY_MANAGER = keccak256("LIQUIDITY_MANAGER");
-    bytes32 public constant EMERGENCY_ROLE = keccak256("EMERGENCY_ROLE");
+    bytes32 public constant EMERGENCY_ROLE    = keccak256("EMERGENCY_ROLE");
 
     struct SwapPath {
         address[] adapters;
@@ -42,29 +42,29 @@ contract DotFlowRouter is AccessControl, ReentrancyGuard, Pausable {
     struct CrossChainSwapRequest {
         bytes32 swapId;
         bytes32 xcmMessageId;
-        uint32 destinationChainId;
+        uint32  destinationChainId;
         address executor;
-        bytes xcmCallData;
+        bytes   xcmCallData;
         uint256 sourceAmount;
         uint256 targetAmount;
-        uint64 timeout;
+        uint64  timeout;
     }
 
     uint256 private _swapNonces;
-    mapping(bytes32 => SwapRequest) private _swapRequests;
-    mapping(bytes32 => CrossChainSwapRequest) private _crossChainSwaps;
-    mapping(bytes32 => bool) private _executedSwaps;
-    mapping(address => EnumerableSet.Bytes32Set) private _userSwaps;
-    mapping(address => mapping(address => uint256)) private _userSwapCount;
+    mapping(bytes32 => SwapRequest)                          private _swapRequests;
+    mapping(bytes32 => CrossChainSwapRequest)                private _crossChainSwaps;
+    mapping(bytes32 => bool)                                 private _executedSwaps;
+    mapping(address => EnumerableSet.Bytes32Set)             private _userSwaps;
+    mapping(address => mapping(address => uint256))          private _userSwapCount;
 
-    EnumerableSet.AddressSet private _activeAdapters;
-    mapping(address => ILiquidityAdapter.AdapterInfo) private _adapterInfo;
+    EnumerableSet.AddressSet                                 private _activeAdapters;
+    mapping(address => ILiquidityAdapter.AdapterInfo)        private _adapterInfo;
 
-    IXCM private _xcmExecutor;
-    address public feeCollector;
-    uint24 public protocolFee;
-    uint24 public constant MAX_PROTOCOL_FEE = 1000; // 10%
-    uint256 private constant FEE_DENOMINATOR = 10000;
+    IXCM    private _xcmExecutor;
+    address public  feeCollector;
+    uint24  public  protocolFee;
+    uint24  public  constant MAX_PROTOCOL_FEE = 1000; // 10%
+    uint256 private constant FEE_DENOMINATOR  = 10000;
 
     error InvalidPath();
     error ExpiredDeadline(uint256 deadline, uint256 timestamp);
@@ -85,7 +85,6 @@ contract DotFlowRouter is AccessControl, ReentrancyGuard, Pausable {
         address recipient,
         uint256 deadline
     );
-
     event SwapExecuted(
         bytes32 indexed swapId,
         address indexed user,
@@ -93,21 +92,18 @@ contract DotFlowRouter is AccessControl, ReentrancyGuard, Pausable {
         uint256 fee,
         uint256 timestamp
     );
-
     event CrossChainSwapInitiated(
         bytes32 indexed swapId,
         bytes32 indexed xcmMessageId,
-        uint32 indexed destinationChain,
+        uint32  indexed destinationChain,
         uint256 amount
     );
-
     event CrossChainSwapCompleted(
         bytes32 indexed swapId,
         bytes32 indexed xcmMessageId,
         address recipient,
         uint256 amount
     );
-
     event AdapterAdded(address indexed adapter, string name, uint24 fee);
     event AdapterRemoved(address indexed adapter);
     event ProtocolFeeUpdated(uint24 oldFee, uint24 newFee);
@@ -116,10 +112,9 @@ contract DotFlowRouter is AccessControl, ReentrancyGuard, Pausable {
 
     modifier validPath(SwapPath calldata path) {
         if (path.adapters.length == 0 || path.path.length < 2) revert InvalidPath();
-        if (path.adapters.length != path.path.length - 1) revert InvalidPath();
+        if (path.adapters.length != path.path.length - 1)      revert InvalidPath();
         if (path.isCrossChain && path.destinationChains.length != path.adapters.length)
             revert CrossChainMismatch();
-
         for (uint i = 0; i < path.adapters.length; i++) {
             if (!_activeAdapters.contains(path.adapters[i]))
                 revert AdapterNotApproved(path.adapters[i]);
@@ -135,15 +130,16 @@ contract DotFlowRouter is AccessControl, ReentrancyGuard, Pausable {
     constructor(address feeCollector_, uint24 protocolFee_) {
         if (feeCollector_ == address(0)) revert ZeroAddress();
         if (protocolFee_ > MAX_PROTOCOL_FEE) revert("Fee too high");
-
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _grantRole(ROUTER_ADMIN, msg.sender);
-
-        feeCollector = feeCollector_;
-        protocolFee = protocolFee_;
-        _swapNonces = 1;
+        feeCollector  = feeCollector_;
+        protocolFee   = protocolFee_;
+        _swapNonces   = 1;
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // Same-chain swap (unchanged)
+    // ─────────────────────────────────────────────────────────────────────────
     function swap(
         address tokenIn,
         address tokenOut,
@@ -160,29 +156,28 @@ contract DotFlowRouter is AccessControl, ReentrancyGuard, Pausable {
         checkDeadline(deadline)
         returns (bytes32 swapId, uint256 amountOut)
     {
-        if (amountIn == 0) revert ZeroAmount();
+        if (amountIn == 0)          revert ZeroAmount();
         if (recipient == address(0)) revert ZeroAddress();
-        if (path.isCrossChain) revert("Use crossChainSwap for cross-chain transfers");
+        if (path.isCrossChain)      revert("Use crossChainSwap for cross-chain transfers");
 
         swapId = _generateSwapId(msg.sender, tokenIn, tokenOut, amountIn, _swapNonces);
 
         SwapRequest storage request = _swapRequests[swapId];
-        request.id = swapId;
-        request.user = msg.sender;
-        request.tokenIn = tokenIn;
-        request.tokenOut = tokenOut;
-        request.amountIn = amountIn;
+        request.id          = swapId;
+        request.user        = msg.sender;
+        request.tokenIn     = tokenIn;
+        request.tokenOut    = tokenOut;
+        request.amountIn    = amountIn;
         request.amountOutMin = amountOutMin;
-        request.recipient = recipient;
-        request.deadline = deadline;
-        request.path = path;
-        request.nonce = _swapNonces;
+        request.recipient   = recipient;
+        request.deadline    = deadline;
+        request.path        = path;
+        request.nonce       = _swapNonces;
 
         _swapNonces++;
         _userSwaps[msg.sender].add(swapId);
         _userSwapCount[msg.sender][tokenIn]++;
 
-        // Pull tokens in their native decimals — no conversion
         IERC20(tokenIn).safeTransferFrom(msg.sender, address(this), amountIn);
 
         emit SwapCreated(swapId, msg.sender, tokenIn, tokenOut, amountIn, amountOutMin, recipient, deadline);
@@ -191,22 +186,21 @@ contract DotFlowRouter is AccessControl, ReentrancyGuard, Pausable {
 
         if (amountOut < amountOutMin) revert InsufficientOutput(amountOutMin, amountOut);
 
-        uint256 fee = (amountOut * protocolFee) / FEE_DENOMINATOR;
+        uint256 fee          = (amountOut * protocolFee) / FEE_DENOMINATOR;
         uint256 amountAfterFee = amountOut - fee;
 
-        if (fee > 0) {
-            IERC20(tokenOut).safeTransfer(feeCollector, fee);
-        }
-
+        if (fee > 0) IERC20(tokenOut).safeTransfer(feeCollector, fee);
         IERC20(tokenOut).safeTransfer(recipient, amountAfterFee);
 
         _executedSwaps[swapId] = true;
-
         emit SwapExecuted(swapId, msg.sender, amountAfterFee, fee, block.timestamp);
 
         return (swapId, amountAfterFee);
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // Cross-chain swap — calls CrossChainExecutor.sendParachainAssets
+    // ─────────────────────────────────────────────────────────────────────────
     function crossChainSwap(
         address tokenIn,
         address tokenOut,
@@ -214,9 +208,9 @@ contract DotFlowRouter is AccessControl, ReentrancyGuard, Pausable {
         uint256 amountOutMin,
         address recipient,
         SwapPath calldata path,
-        uint32 destinationChainId,
+        uint32  destinationChainId,
         bytes calldata xcmCallData,
-        uint64 xcmTimeout,
+        uint64  xcmTimeout,
         uint256 deadline
     )
         external
@@ -227,61 +221,72 @@ contract DotFlowRouter is AccessControl, ReentrancyGuard, Pausable {
         checkDeadline(deadline)
         returns (bytes32 swapId, bytes32 xcmMessageId)
     {
-        if (amountIn == 0) revert ZeroAmount();
-        if (recipient == address(0)) revert ZeroAddress();
-        if (!path.isCrossChain) revert("Path must be cross-chain");
-        if (address(_xcmExecutor) == address(0)) revert("XCM executor not set");
+        if (amountIn == 0)                           revert ZeroAmount();
+        if (recipient == address(0))                  revert ZeroAddress();
+        if (!path.isCrossChain)                       revert("Path must be cross-chain");
+        if (address(_xcmExecutor) == address(0))      revert("XCM executor not set");
 
         swapId = _generateSwapId(msg.sender, tokenIn, tokenOut, amountIn, _swapNonces);
 
-        SwapRequest storage swapRequest = _swapRequests[swapId];
-        swapRequest.id = swapId;
-        swapRequest.user = msg.sender;
-        swapRequest.tokenIn = tokenIn;
-        swapRequest.tokenOut = tokenOut;
-        swapRequest.amountIn = amountIn;
-        swapRequest.amountOutMin = amountOutMin;
-        swapRequest.recipient = address(this);
-        swapRequest.deadline = deadline;
-        swapRequest.path = path;
-        swapRequest.nonce = _swapNonces;
+        {
+            SwapRequest storage swapRequest = _swapRequests[swapId];
+            swapRequest.id           = swapId;
+            swapRequest.user         = msg.sender;
+            swapRequest.tokenIn      = tokenIn;
+            swapRequest.tokenOut     = tokenOut;
+            swapRequest.amountIn     = amountIn;
+            swapRequest.amountOutMin = amountOutMin;
+            swapRequest.recipient    = address(this); // router holds tokens until XCM dispatch
+            swapRequest.deadline     = deadline;
+            swapRequest.path         = path;
+            swapRequest.nonce        = _swapNonces;
+        }
 
         _swapNonces++;
 
         IERC20(tokenIn).safeTransferFrom(msg.sender, address(this), amountIn);
-
         emit SwapCreated(swapId, msg.sender, tokenIn, tokenOut, amountIn, amountOutMin, address(this), deadline);
 
-        uint256 swapOutput = _executeSwap(swapRequest);
-
+        // ── Step 1: local swap on Hub (e.g. USDC → WDOT via Uniswap pair) ────
+        uint256 swapOutput = _executeSwap(_swapRequests[swapId]);
         if (swapOutput < amountOutMin) revert InsufficientOutput(amountOutMin, swapOutput);
 
-        IXCM.XCMInstruction memory instruction = IXCM.XCMInstruction({
-            destinationChainId: destinationChainId,
-            sender: address(this),
-            recipient: recipient,
-            asset: tokenOut,
-            amount: uint128(swapOutput),
-            callData: xcmCallData,
-            weight: _calculateWeight(tokenOut, swapOutput, xcmCallData),
-            transactWeight: _calculateTransactWeight(tokenOut, swapOutput, xcmCallData),
-            timeout: xcmTimeout
+        // ── Step 2: build ParachainAsset and dispatch via XCM precompile ──────
+        // Asset ID = token address zero-padded to bytes32 (standard on Polkadot Hub)
+        IXCM.ParachainAsset[] memory assets = new IXCM.ParachainAsset[](1);
+        assets[0] = IXCM.ParachainAsset({
+            assetId:  bytes32(uint256(uint160(tokenOut))),
+            amount:   uint128(swapOutput),
+            isNative: false
         });
 
-        uint256 xcmFee = _xcmExecutor.calculateFee(destinationChainId, instruction.weight, swapOutput);
+        uint64  weight = _calculateWeight(xcmCallData);
+        uint256 xcmFee = _xcmExecutor.calculateFee(destinationChainId, weight, swapOutput);
         if (msg.value < xcmFee) revert("Insufficient XCM fee");
 
-        xcmMessageId = _xcmExecutor.sendXCM{value: xcmFee}(instruction);
+        // Approve executor to pull tokenOut from this contract
+        IERC20(tokenOut).safeIncreaseAllowance(address(_xcmExecutor), swapOutput);
 
-        CrossChainSwapRequest storage ccRequest = _crossChainSwaps[swapId];
-        ccRequest.swapId = swapId;
-        ccRequest.xcmMessageId = xcmMessageId;
-        ccRequest.destinationChainId = destinationChainId;
-        ccRequest.executor = recipient;
-        ccRequest.xcmCallData = xcmCallData;
-        ccRequest.sourceAmount = amountIn;
-        ccRequest.targetAmount = swapOutput;
-        ccRequest.timeout = xcmTimeout;
+        xcmMessageId = _xcmExecutor.sendParachainAssets{value: xcmFee}(
+            destinationChainId,
+            recipient,
+            assets,
+            xcmCallData,
+            xcmTimeout
+        );
+
+        // ── Step 3: record and emit ────────────────────────────────────────────
+        {
+            CrossChainSwapRequest storage ccRequest = _crossChainSwaps[swapId];
+            ccRequest.swapId             = swapId;
+            ccRequest.xcmMessageId       = xcmMessageId;
+            ccRequest.destinationChainId = destinationChainId;
+            ccRequest.executor           = recipient;
+            ccRequest.xcmCallData        = xcmCallData;
+            ccRequest.sourceAmount       = amountIn;
+            ccRequest.targetAmount       = swapOutput;
+            ccRequest.timeout            = xcmTimeout;
+        }
 
         if (msg.value > xcmFee) {
             payable(msg.sender).transfer(msg.value - xcmFee);
@@ -292,134 +297,84 @@ contract DotFlowRouter is AccessControl, ReentrancyGuard, Pausable {
         return (swapId, xcmMessageId);
     }
 
-    /**
-     * @dev Executes the swap hop-by-hop through the adapter path.
-     *
-     *      IMPORTANT: All amounts flow in each token's NATIVE decimals.
-     *      The router does NOT convert to/from 18 decimals — that is entirely
-     *      the adapter's responsibility. This prevents the double-conversion bug
-     *      where the router was scaling amountIn to 1e18 before setting the
-     *      allowance, but the adapter was also doing the same scaling internally,
-     *      causing allowance mismatches and transfer failures.
-     */
-    function _executeSwap(SwapRequest memory request) private returns (uint256 amountOut) {
-        uint256 currentAmount = request.amountIn; // native decimals of tokenIn
-        address currentToken = request.tokenIn;
+    // ─────────────────────────────────────────────────────────────────────────
+    // Internal helpers
+    // ─────────────────────────────────────────────────────────────────────────
+
+    function _executeSwap(SwapRequest memory request) private returns (uint256) {
+        uint256 currentAmount = request.amountIn;
+        address currentToken  = request.tokenIn;
 
         for (uint i = 0; i < request.path.adapters.length; i++) {
-            address adapter = request.path.adapters[i];
+            address adapter   = request.path.adapters[i];
             address nextToken = request.path.path[i + 1];
 
-            // Allowance must match the native amount we actually hold
             uint256 currentAllowance = IERC20(currentToken).allowance(address(this), adapter);
             if (currentAllowance > 0) {
                 IERC20(currentToken).safeDecreaseAllowance(adapter, currentAllowance);
             }
             IERC20(currentToken).safeIncreaseAllowance(adapter, currentAmount);
 
-            // Adapter receives native amountIn and returns native amountOut
-            (uint256 adapterOutput, /* feeAmount */) = ILiquidityAdapter(adapter).swapExactTokensForTokens(
-                currentToken,
-                nextToken,
-                currentAmount, // native decimals — adapter converts internally as needed
-                0,
-                address(this),
-                ""
+            (uint256 adapterOutput, /* fee */) = ILiquidityAdapter(adapter).swapExactTokensForTokens(
+                currentToken, nextToken, currentAmount, 0, address(this), ""
             );
 
             if (adapterOutput == 0) revert("Swap failed at adapter");
 
-            currentAmount = adapterOutput; // native decimals of nextToken
-            currentToken = nextToken;
+            currentAmount = adapterOutput;
+            currentToken  = nextToken;
         }
 
         return currentAmount;
     }
 
-    /**
-     * @dev Quote how much tokenOut you get for amountIn of tokenIn across the path.
-     *      All amounts are in each token's native decimals.
-     *      The adapter's getAmountOut handles any internal decimal normalisation.
-     */
+    function _calculateWeight(bytes memory callData) private pure returns (uint64) {
+        return 1_010_000_000 + uint64(callData.length) * 1_000;
+    }
+
+    function _generateSwapId(
+        address user, address tokenIn, address tokenOut,
+        uint256 amountIn, uint256 nonce
+    ) private view returns (bytes32) {
+        return keccak256(abi.encodePacked(
+            user, tokenIn, tokenOut, amountIn, nonce, block.chainid, block.timestamp
+        ));
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // getAmountOut quote (unchanged)
+    // ─────────────────────────────────────────────────────────────────────────
     function getAmountOut(
         address tokenIn,
         address tokenOut,
         uint256 amountIn,
         SwapPath calldata path
     ) external view validPath(path) returns (uint256 amountOut, uint256 totalFee, uint256 priceImpact) {
-        uint256 currentAmount = amountIn; // native decimals of tokenIn
-        uint256 cumulativeFee = 0;
+        uint256 currentAmount    = amountIn;
+        uint256 cumulativeFee    = 0;
         uint256 totalPriceImpact = 0;
-        address currentToken = tokenIn;
+        address currentToken     = tokenIn;
 
         for (uint i = 0; i < path.adapters.length; i++) {
-            address adapter = path.adapters[i];
-            address nextToken = path.path[i + 1];
-
-            // Pass native amount; adapter returns native output for nextToken
-            (uint256 adapterOutput, uint24 fee, uint256 impact) = ILiquidityAdapter(adapter).getAmountOut(
-                currentToken,
-                nextToken,
-                currentAmount
+            (uint256 adapterOutput, uint24 fee, uint256 impact) = ILiquidityAdapter(path.adapters[i]).getAmountOut(
+                currentToken, path.path[i + 1], currentAmount
             );
-
-            currentAmount = adapterOutput; // native decimals of nextToken
-
-            uint256 feeInOutputToken = (currentAmount * fee) / FEE_DENOMINATOR;
-            cumulativeFee += feeInOutputToken;
+            currentAmount     = adapterOutput;
+            cumulativeFee    += (currentAmount * fee) / FEE_DENOMINATOR;
             totalPriceImpact += impact;
-            currentToken = nextToken;
+            currentToken      = path.path[i + 1];
         }
 
         uint256 protocolFeeAmount = (currentAmount * protocolFee) / FEE_DENOMINATOR;
         amountOut = currentAmount - protocolFeeAmount;
-        totalFee = cumulativeFee + protocolFeeAmount;
+        totalFee  = cumulativeFee + protocolFeeAmount;
 
         return (amountOut, totalFee, totalPriceImpact / path.adapters.length);
     }
 
-    function _generateSwapId(
-        address user,
-        address tokenIn,
-        address tokenOut,
-        uint256 amountIn,
-        uint256 nonce
-    ) private view returns (bytes32) {
-        return keccak256(
-            abi.encodePacked(
-                user,
-                tokenIn,
-                tokenOut,
-                amountIn,
-                nonce,
-                block.chainid,
-                block.timestamp
-            )
-        );
-    }
-
-    function _calculateWeight(
-        address token,
-        uint256 amount,
-        bytes memory callData
-    ) private pure returns (uint64) {
-        uint64 baseWeight = 1000000000;
-        uint64 tokenWeight = 10000000;
-        uint64 dataWeight = uint64(callData.length) * 1000;
-        return baseWeight + tokenWeight + dataWeight;
-    }
-
-    function _calculateTransactWeight(
-        address token,
-        uint256 amount,
-        bytes memory callData
-    ) private pure returns (uint128) {
-        return uint128(_calculateWeight(token, amount, callData)) * 2;
-    }
-
-    // ─────────────────────────────────────────────
-    // View / admin functions (unchanged)
-    // ─────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────────────────
+    // Admin / view functions (unchanged)
+    // ─────────────────────────────────────────────────────────────────────────
 
     function getSwapRequest(bytes32 swapId) external view returns (SwapRequest memory) {
         return _swapRequests[swapId];
@@ -444,20 +399,16 @@ contract DotFlowRouter is AccessControl, ReentrancyGuard, Pausable {
     function addAdapter(address adapter) external onlyRole(ROUTER_ADMIN) {
         if (adapter == address(0)) revert ZeroAddress();
         if (_activeAdapters.contains(adapter)) revert("Adapter already added");
-
         ILiquidityAdapter.AdapterInfo memory info = ILiquidityAdapter(adapter).getAdapterInfo();
         _adapterInfo[adapter] = info;
         _activeAdapters.add(adapter);
-
         emit AdapterAdded(adapter, info.name, info.fee);
     }
 
     function removeAdapter(address adapter) external onlyRole(ROUTER_ADMIN) {
         if (!_activeAdapters.contains(adapter)) revert("Adapter not found");
-
         _activeAdapters.remove(adapter);
         delete _adapterInfo[adapter];
-
         emit AdapterRemoved(adapter);
     }
 
@@ -490,19 +441,11 @@ contract DotFlowRouter is AccessControl, ReentrancyGuard, Pausable {
         emit XCMExecutorUpdated(oldExecutor, executor);
     }
 
-    function pause() external onlyRole(EMERGENCY_ROLE) {
-        _pause();
-    }
+    function pause() external onlyRole(EMERGENCY_ROLE) { _pause(); }
 
-    function unpause() external onlyRole(EMERGENCY_ROLE) {
-        _unpause();
-    }
+    function unpause() external onlyRole(EMERGENCY_ROLE) { _unpause(); }
 
-    function emergencyWithdraw(
-        address token,
-        address to,
-        uint256 amount
-    ) external onlyRole(EMERGENCY_ROLE) {
+    function emergencyWithdraw(address token, address to, uint256 amount) external onlyRole(EMERGENCY_ROLE) {
         if (to == address(0)) revert ZeroAddress();
         IERC20(token).safeTransfer(to, amount);
     }
