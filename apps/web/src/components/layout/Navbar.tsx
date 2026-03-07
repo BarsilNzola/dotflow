@@ -1,17 +1,18 @@
+// components/layout/Navbar.tsx  — no changes to navigation array needed
+// Cross-chain is surfaced as a tab on /swap, not a separate nav item.
 import { Link, useLocation } from 'react-router-dom'
 import { ConnectButton } from '../wallet/ConnectButton'
 import { NetworkIndicator } from '../wallet/NetworkIndicator'
 import { cn } from '../../lib/utils'
 
 const navigation = [
-  { name: 'Home', href: '/' },
-  { name: 'Swap', href: '/swap' },
-  { name: 'Dashboard', href: '/dashboard' }
+  { name: 'Home',      href: '/' },
+  { name: 'Swap',      href: '/swap' },
+  { name: 'Dashboard', href: '/dashboard' },
 ]
 
 export function Navbar() {
   const location = useLocation()
-
   return (
     <nav className="border-b border-border bg-card">
       <div className="container mx-auto px-4">
@@ -33,6 +34,12 @@ export function Navbar() {
                   )}
                 >
                   {item.name}
+                  {/* Surface the XCM pill on the Swap nav link as a hint */}
+                  {item.href === '/swap' && (
+                    <span className="ml-1.5 text-[9px] font-bold bg-primary/15 text-primary px-1 py-0.5 rounded align-middle">
+                      XCM
+                    </span>
+                  )}
                 </Link>
               ))}
             </div>

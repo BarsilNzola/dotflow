@@ -1,11 +1,11 @@
 export const CONTRACT_ADDRESSES = {
     // Polkadot Hub
     420420417: {
-      dotFlowRouter: '0xf35B4d277AbFd46f71A838a72b33ad58f304E09B',
-      liquidityManager: '0x1b7df4e24690a6bFC46fB8C50098425D2dD02CeA',
-      crossChainExecutor: '0xC365A93EA54A68cb096D1Cb4e25E86eFaeDCf122',
-      uniswapV2Adapter: '0x448928adc4a26aE816B8CB343305c4136a91dfEd',
-      parachainAdapter: '0x504fdF0192fa79cd3505c5e9E3D6a06e61778B89',
+      dotFlowRouter: '0x955E01C6CfE3D48F752C958DB42da5997C6C3a5F',
+      liquidityManager: '0x7B6A6a57Efc00529a97db51426107Aa569d199Da',
+      crossChainExecutor: '0xD21a7497551A05DF3018202aE28AB0056fD2B15b',
+      uniswapV2Adapter: '0xB339908346d5307a16DEcD80bB64e6D1cDB46c0a',
+      parachainAdapter: '0x764b1777E66a1aCCd87aC83ffEd35E0141230B82',
       usdc: '0x5a5306B699d21c9d6a16A792b266215d550cc338',
       wdot: '0xE32Abcaa249aB85bC995377E6DDd96f283343B28',
       wpas: '0xD30D62367a61636a2D7c2bD759a507974be1B193', 
