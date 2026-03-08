@@ -37,7 +37,7 @@ const STAGES: StageInfo[] = [
     sublabel: 'Locking tokens & sending XCM message',
   },
   {
-    id:       ['xcm_pending', 'xcm_executed'],
+    id:       'xcm_pending',
     label:    '④ Destination Chain',
     sublabel: 'Waiting for execution on destination',
   },
@@ -47,7 +47,7 @@ const STAGES: StageInfo[] = [
 
 const STAGE_ORDER: CrossChainStage[] = [
   'approving', 'approved', 'swapping',
-  'xcm_dispatching', 'xcm_pending', 'xcm_executed',
+  'xcm_dispatching', 'xcm_pending', 'xcm_executed', 'failed',
 ]
 
 function stageIndex(stage: CrossChainStage): number {

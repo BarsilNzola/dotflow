@@ -23,6 +23,15 @@ import type {
   TypedContractMethod,
 } from "../../common";
 
+export declare namespace IXcmPrecompile {
+  export type WeightStruct = { refTime: BigNumberish; proofSize: BigNumberish };
+
+  export type WeightStructOutput = [refTime: bigint, proofSize: bigint] & {
+    refTime: bigint;
+    proofSize: bigint;
+  };
+}
+
 export declare namespace CrossChainExecutor {
   export type ChainConfigStruct = {
     chainId: BigNumberish;
@@ -31,9 +40,9 @@ export declare namespace CrossChainExecutor {
     weightFee: BigNumberish;
     minFee: BigNumberish;
     maxWeight: BigNumberish;
-    gateway: AddressLike;
-    genesisHash: BytesLike;
     isActive: boolean;
+    xcmRefTime: BigNumberish;
+    xcmProofSize: BigNumberish;
   };
 
   export type ChainConfigStructOutput = [
@@ -43,9 +52,9 @@ export declare namespace CrossChainExecutor {
     weightFee: bigint,
     minFee: bigint,
     maxWeight: bigint,
-    gateway: string,
-    genesisHash: string,
-    isActive: boolean
+    isActive: boolean,
+    xcmRefTime: bigint,
+    xcmProofSize: bigint
   ] & {
     chainId: bigint;
     name: string;
@@ -53,9 +62,9 @@ export declare namespace CrossChainExecutor {
     weightFee: bigint;
     minFee: bigint;
     maxWeight: bigint;
-    gateway: string;
-    genesisHash: string;
     isActive: boolean;
+    xcmRefTime: bigint;
+    xcmProofSize: bigint;
   };
 }
 
@@ -111,40 +120,6 @@ export declare namespace IXCM {
     amount: bigint,
     isNative: boolean
   ] & { assetId: string; amount: bigint; isNative: boolean };
-
-  export type XCMInstructionStruct = {
-    destinationChainId: BigNumberish;
-    sender: AddressLike;
-    recipient: AddressLike;
-    asset: AddressLike;
-    amount: BigNumberish;
-    callData: BytesLike;
-    weight: BigNumberish;
-    transactWeight: BigNumberish;
-    timeout: BigNumberish;
-  };
-
-  export type XCMInstructionStructOutput = [
-    destinationChainId: bigint,
-    sender: string,
-    recipient: string,
-    asset: string,
-    amount: bigint,
-    callData: string,
-    weight: bigint,
-    transactWeight: bigint,
-    timeout: bigint
-  ] & {
-    destinationChainId: bigint;
-    sender: string;
-    recipient: string;
-    asset: string;
-    amount: bigint;
-    callData: string;
-    weight: bigint;
-    transactWeight: bigint;
-    timeout: bigint;
-  };
 }
 
 export interface CrossChainExecutorInterface extends Interface {
@@ -154,15 +129,12 @@ export interface CrossChainExecutorInterface extends Interface {
       | "DEFAULT_ADMIN_ROLE"
       | "EXECUTOR_ROLE"
       | "RELAYER_ROLE"
+      | "XCM_PRECOMPILE"
       | "calculateFee"
       | "cancelMessage"
       | "configureChain"
       | "deactivateChain"
-      | "eip712Domain"
-      | "executeXCM"
-      | "getAssetForToken"
-      | "getChainAssetCount"
-      | "getChainAssets"
+      | "estimateXCMWeight"
       | "getChainConfig"
       | "getMessageDetails"
       | "getMessageStatus"
@@ -172,24 +144,19 @@ export interface CrossChainExecutorInterface extends Interface {
       | "grantRole"
       | "hasRole"
       | "mapAsset"
+      | "markExecuted"
       | "processExpiredMessages"
       | "renounceRole"
       | "revokeRole"
       | "sendParachainAssets"
-      | "sendXCM"
       | "supportsInterface"
-      | "unmapAsset"
-      | "verifyXCM"
   ): FunctionFragment;
 
   getEvent(
     nameOrSignatureOrTopic:
       | "AssetMapped"
-      | "AssetUnmapped"
-      | "AssetsTransferred"
       | "ChainConfigured"
       | "ChainDeactivated"
-      | "EIP712DomainChanged"
       | "MessageStatusUpdated"
       | "RoleAdminChanged"
       | "RoleGranted"
@@ -197,8 +164,8 @@ export interface CrossChainExecutorInterface extends Interface {
       | "XCMMessageCancelled"
       | "XCMMessageExecuted"
       | "XCMMessageExpired"
-      | "XCMMessageFailed"
       | "XCMMessagePrepared"
+      | "XCMSent"
   ): EventFragment;
 
   encodeFunctionData(
@@ -218,6 +185,10 @@ export interface CrossChainExecutorInterface extends Interface {
     values?: undefined
   ): string;
   encodeFunctionData(
+    functionFragment: "XCM_PRECOMPILE",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
     functionFragment: "calculateFee",
     values: [BigNumberish, BigNumberish, BigNumberish]
   ): string;
@@ -234,8 +205,8 @@ export interface CrossChainExecutorInterface extends Interface {
       BigNumberish,
       BigNumberish,
       BigNumberish,
-      AddressLike,
-      BytesLike
+      BigNumberish,
+      BigNumberish
     ]
   ): string;
   encodeFunctionData(
@@ -243,24 +214,8 @@ export interface CrossChainExecutorInterface extends Interface {
     values: [BigNumberish]
   ): string;
   encodeFunctionData(
-    functionFragment: "eip712Domain",
-    values?: undefined
-  ): string;
-  encodeFunctionData(
-    functionFragment: "executeXCM",
-    values: [BytesLike, BytesLike]
-  ): string;
-  encodeFunctionData(
-    functionFragment: "getAssetForToken",
-    values: [AddressLike, BigNumberish]
-  ): string;
-  encodeFunctionData(
-    functionFragment: "getChainAssetCount",
-    values: [BigNumberish]
-  ): string;
-  encodeFunctionData(
-    functionFragment: "getChainAssets",
-    values: [BigNumberish]
+    functionFragment: "estimateXCMWeight",
+    values: [BigNumberish, BigNumberish]
   ): string;
   encodeFunctionData(
     functionFragment: "getChainConfig",
@@ -299,6 +254,10 @@ export interface CrossChainExecutorInterface extends Interface {
     values: [BigNumberish, BytesLike, AddressLike, BigNumberish, boolean]
   ): string;
   encodeFunctionData(
+    functionFragment: "markExecuted",
+    values: [BytesLike]
+  ): string;
+  encodeFunctionData(
     functionFragment: "processExpiredMessages",
     values: [BytesLike[]]
   ): string;
@@ -321,20 +280,8 @@ export interface CrossChainExecutorInterface extends Interface {
     ]
   ): string;
   encodeFunctionData(
-    functionFragment: "sendXCM",
-    values: [IXCM.XCMInstructionStruct]
-  ): string;
-  encodeFunctionData(
     functionFragment: "supportsInterface",
     values: [BytesLike]
-  ): string;
-  encodeFunctionData(
-    functionFragment: "unmapAsset",
-    values: [BigNumberish, BytesLike]
-  ): string;
-  encodeFunctionData(
-    functionFragment: "verifyXCM",
-    values: [BytesLike, BytesLike]
   ): string;
 
   decodeFunctionResult(
@@ -354,6 +301,10 @@ export interface CrossChainExecutorInterface extends Interface {
     data: BytesLike
   ): Result;
   decodeFunctionResult(
+    functionFragment: "XCM_PRECOMPILE",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
     functionFragment: "calculateFee",
     data: BytesLike
   ): Result;
@@ -370,20 +321,7 @@ export interface CrossChainExecutorInterface extends Interface {
     data: BytesLike
   ): Result;
   decodeFunctionResult(
-    functionFragment: "eip712Domain",
-    data: BytesLike
-  ): Result;
-  decodeFunctionResult(functionFragment: "executeXCM", data: BytesLike): Result;
-  decodeFunctionResult(
-    functionFragment: "getAssetForToken",
-    data: BytesLike
-  ): Result;
-  decodeFunctionResult(
-    functionFragment: "getChainAssetCount",
-    data: BytesLike
-  ): Result;
-  decodeFunctionResult(
-    functionFragment: "getChainAssets",
+    functionFragment: "estimateXCMWeight",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
@@ -411,6 +349,10 @@ export interface CrossChainExecutorInterface extends Interface {
   decodeFunctionResult(functionFragment: "hasRole", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "mapAsset", data: BytesLike): Result;
   decodeFunctionResult(
+    functionFragment: "markExecuted",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
     functionFragment: "processExpiredMessages",
     data: BytesLike
   ): Result;
@@ -423,13 +365,10 @@ export interface CrossChainExecutorInterface extends Interface {
     functionFragment: "sendParachainAssets",
     data: BytesLike
   ): Result;
-  decodeFunctionResult(functionFragment: "sendXCM", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "supportsInterface",
     data: BytesLike
   ): Result;
-  decodeFunctionResult(functionFragment: "unmapAsset", data: BytesLike): Result;
-  decodeFunctionResult(functionFragment: "verifyXCM", data: BytesLike): Result;
 }
 
 export namespace AssetMappedEvent {
@@ -460,66 +399,16 @@ export namespace AssetMappedEvent {
   export type LogDescription = TypedLogDescription<Event>;
 }
 
-export namespace AssetUnmappedEvent {
-  export type InputTuple = [
-    chainId: BigNumberish,
-    assetId: BytesLike,
-    token: AddressLike
-  ];
-  export type OutputTuple = [chainId: bigint, assetId: string, token: string];
-  export interface OutputObject {
-    chainId: bigint;
-    assetId: string;
-    token: string;
-  }
-  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
-  export type Filter = TypedDeferredTopicFilter<Event>;
-  export type Log = TypedEventLog<Event>;
-  export type LogDescription = TypedLogDescription<Event>;
-}
-
-export namespace AssetsTransferredEvent {
-  export type InputTuple = [
-    messageId: BytesLike,
-    chainId: BigNumberish,
-    sender: AddressLike,
-    assetCount: BigNumberish
-  ];
-  export type OutputTuple = [
-    messageId: string,
-    chainId: bigint,
-    sender: string,
-    assetCount: bigint
-  ];
-  export interface OutputObject {
-    messageId: string;
-    chainId: bigint;
-    sender: string;
-    assetCount: bigint;
-  }
-  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
-  export type Filter = TypedDeferredTopicFilter<Event>;
-  export type Log = TypedEventLog<Event>;
-  export type LogDescription = TypedLogDescription<Event>;
-}
-
 export namespace ChainConfiguredEvent {
   export type InputTuple = [
     chainId: BigNumberish,
     name: string,
-    gateway: AddressLike,
     baseFee: BigNumberish
   ];
-  export type OutputTuple = [
-    chainId: bigint,
-    name: string,
-    gateway: string,
-    baseFee: bigint
-  ];
+  export type OutputTuple = [chainId: bigint, name: string, baseFee: bigint];
   export interface OutputObject {
     chainId: bigint;
     name: string;
-    gateway: string;
     baseFee: bigint;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
@@ -534,16 +423,6 @@ export namespace ChainDeactivatedEvent {
   export interface OutputObject {
     chainId: bigint;
   }
-  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
-  export type Filter = TypedDeferredTopicFilter<Event>;
-  export type Log = TypedEventLog<Event>;
-  export type LogDescription = TypedLogDescription<Event>;
-}
-
-export namespace EIP712DomainChangedEvent {
-  export type InputTuple = [];
-  export type OutputTuple = [];
-  export interface OutputObject {}
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
   export type Filter = TypedDeferredTopicFilter<Event>;
   export type Log = TypedEventLog<Event>;
@@ -636,17 +515,17 @@ export namespace XCMMessageCancelledEvent {
 export namespace XCMMessageExecutedEvent {
   export type InputTuple = [
     messageId: BytesLike,
-    transactionHash: BytesLike,
+    xcmHash: BytesLike,
     success: boolean
   ];
   export type OutputTuple = [
     messageId: string,
-    transactionHash: string,
+    xcmHash: string,
     success: boolean
   ];
   export interface OutputObject {
     messageId: string;
-    transactionHash: string;
+    xcmHash: string;
     success: boolean;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
@@ -660,19 +539,6 @@ export namespace XCMMessageExpiredEvent {
   export type OutputTuple = [messageId: string];
   export interface OutputObject {
     messageId: string;
-  }
-  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
-  export type Filter = TypedDeferredTopicFilter<Event>;
-  export type Log = TypedEventLog<Event>;
-  export type LogDescription = TypedLogDescription<Event>;
-}
-
-export namespace XCMMessageFailedEvent {
-  export type InputTuple = [messageId: BytesLike, reason: BytesLike];
-  export type OutputTuple = [messageId: string, reason: string];
-  export interface OutputObject {
-    messageId: string;
-    reason: string;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
   export type Filter = TypedDeferredTopicFilter<Event>;
@@ -707,6 +573,28 @@ export namespace XCMMessagePreparedEvent {
     asset: string;
     amount: bigint;
     timeout: bigint;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
+export namespace XCMSentEvent {
+  export type InputTuple = [
+    messageId: BytesLike,
+    destination: BytesLike,
+    xcmMessage: BytesLike
+  ];
+  export type OutputTuple = [
+    messageId: string,
+    destination: string,
+    xcmMessage: string
+  ];
+  export interface OutputObject {
+    messageId: string;
+    destination: string;
+    xcmMessage: string;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
   export type Filter = TypedDeferredTopicFilter<Event>;
@@ -765,12 +653,10 @@ export interface CrossChainExecutor extends BaseContract {
 
   RELAYER_ROLE: TypedContractMethod<[], [string], "view">;
 
+  XCM_PRECOMPILE: TypedContractMethod<[], [string], "view">;
+
   calculateFee: TypedContractMethod<
-    [
-      destinationChainId: BigNumberish,
-      weight: BigNumberish,
-      amount: BigNumberish
-    ],
+    [chainId: BigNumberish, weight: BigNumberish, amount: BigNumberish],
     [bigint],
     "view"
   >;
@@ -789,8 +675,8 @@ export interface CrossChainExecutor extends BaseContract {
       weightFee: BigNumberish,
       minFee: BigNumberish,
       maxWeight: BigNumberish,
-      gateway: AddressLike,
-      genesisHash: BytesLike
+      xcmRefTime: BigNumberish,
+      xcmProofSize: BigNumberish
     ],
     [void],
     "nonpayable"
@@ -802,43 +688,9 @@ export interface CrossChainExecutor extends BaseContract {
     "nonpayable"
   >;
 
-  eip712Domain: TypedContractMethod<
-    [],
-    [
-      [string, string, string, bigint, string, string, bigint[]] & {
-        fields: string;
-        name: string;
-        version: string;
-        chainId: bigint;
-        verifyingContract: string;
-        salt: string;
-        extensions: bigint[];
-      }
-    ],
-    "view"
-  >;
-
-  executeXCM: TypedContractMethod<
-    [encodedMessage: BytesLike, signature: BytesLike],
-    [[boolean, string] & { success: boolean; result: string }],
-    "nonpayable"
-  >;
-
-  getAssetForToken: TypedContractMethod<
-    [token: AddressLike, chainId: BigNumberish],
-    [[string, boolean] & { assetId: string; exists: boolean }],
-    "view"
-  >;
-
-  getChainAssetCount: TypedContractMethod<
-    [chainId: BigNumberish],
-    [bigint],
-    "view"
-  >;
-
-  getChainAssets: TypedContractMethod<
-    [chainId: BigNumberish],
-    [string[]],
+  estimateXCMWeight: TypedContractMethod<
+    [parachainId: BigNumberish, amount: BigNumberish],
+    [IXcmPrecompile.WeightStructOutput],
     "view"
   >;
 
@@ -861,7 +713,7 @@ export interface CrossChainExecutor extends BaseContract {
   >;
 
   getNonce: TypedContractMethod<
-    [sender: AddressLike, destinationChainId: BigNumberish],
+    [sender: AddressLike, chainId: BigNumberish],
     [bigint],
     "view"
   >;
@@ -898,8 +750,14 @@ export interface CrossChainExecutor extends BaseContract {
     "nonpayable"
   >;
 
+  markExecuted: TypedContractMethod<
+    [messageId: BytesLike],
+    [void],
+    "nonpayable"
+  >;
+
   processExpiredMessages: TypedContractMethod<
-    [messageIds: BytesLike[]],
+    [ids: BytesLike[]],
     [void],
     "nonpayable"
   >;
@@ -921,15 +779,9 @@ export interface CrossChainExecutor extends BaseContract {
       parachainId: BigNumberish,
       recipient: AddressLike,
       assets: IXCM.ParachainAssetStruct[],
-      callData: BytesLike,
+      arg3: BytesLike,
       timeout: BigNumberish
     ],
-    [string],
-    "payable"
-  >;
-
-  sendXCM: TypedContractMethod<
-    [instruction: IXCM.XCMInstructionStruct],
     [string],
     "payable"
   >;
@@ -937,18 +789,6 @@ export interface CrossChainExecutor extends BaseContract {
   supportsInterface: TypedContractMethod<
     [interfaceId: BytesLike],
     [boolean],
-    "view"
-  >;
-
-  unmapAsset: TypedContractMethod<
-    [chainId: BigNumberish, assetId: BytesLike],
-    [void],
-    "nonpayable"
-  >;
-
-  verifyXCM: TypedContractMethod<
-    [messageId: BytesLike, proof: BytesLike],
-    [[boolean, string] & { isValid: boolean; decodedMessage: string }],
     "view"
   >;
 
@@ -969,13 +809,12 @@ export interface CrossChainExecutor extends BaseContract {
     nameOrSignature: "RELAYER_ROLE"
   ): TypedContractMethod<[], [string], "view">;
   getFunction(
+    nameOrSignature: "XCM_PRECOMPILE"
+  ): TypedContractMethod<[], [string], "view">;
+  getFunction(
     nameOrSignature: "calculateFee"
   ): TypedContractMethod<
-    [
-      destinationChainId: BigNumberish,
-      weight: BigNumberish,
-      amount: BigNumberish
-    ],
+    [chainId: BigNumberish, weight: BigNumberish, amount: BigNumberish],
     [bigint],
     "view"
   >;
@@ -992,8 +831,8 @@ export interface CrossChainExecutor extends BaseContract {
       weightFee: BigNumberish,
       minFee: BigNumberish,
       maxWeight: BigNumberish,
-      gateway: AddressLike,
-      genesisHash: BytesLike
+      xcmRefTime: BigNumberish,
+      xcmProofSize: BigNumberish
     ],
     [void],
     "nonpayable"
@@ -1002,42 +841,12 @@ export interface CrossChainExecutor extends BaseContract {
     nameOrSignature: "deactivateChain"
   ): TypedContractMethod<[chainId: BigNumberish], [void], "nonpayable">;
   getFunction(
-    nameOrSignature: "eip712Domain"
+    nameOrSignature: "estimateXCMWeight"
   ): TypedContractMethod<
-    [],
-    [
-      [string, string, string, bigint, string, string, bigint[]] & {
-        fields: string;
-        name: string;
-        version: string;
-        chainId: bigint;
-        verifyingContract: string;
-        salt: string;
-        extensions: bigint[];
-      }
-    ],
+    [parachainId: BigNumberish, amount: BigNumberish],
+    [IXcmPrecompile.WeightStructOutput],
     "view"
   >;
-  getFunction(
-    nameOrSignature: "executeXCM"
-  ): TypedContractMethod<
-    [encodedMessage: BytesLike, signature: BytesLike],
-    [[boolean, string] & { success: boolean; result: string }],
-    "nonpayable"
-  >;
-  getFunction(
-    nameOrSignature: "getAssetForToken"
-  ): TypedContractMethod<
-    [token: AddressLike, chainId: BigNumberish],
-    [[string, boolean] & { assetId: string; exists: boolean }],
-    "view"
-  >;
-  getFunction(
-    nameOrSignature: "getChainAssetCount"
-  ): TypedContractMethod<[chainId: BigNumberish], [bigint], "view">;
-  getFunction(
-    nameOrSignature: "getChainAssets"
-  ): TypedContractMethod<[chainId: BigNumberish], [string[]], "view">;
   getFunction(
     nameOrSignature: "getChainConfig"
   ): TypedContractMethod<
@@ -1058,7 +867,7 @@ export interface CrossChainExecutor extends BaseContract {
   getFunction(
     nameOrSignature: "getNonce"
   ): TypedContractMethod<
-    [sender: AddressLike, destinationChainId: BigNumberish],
+    [sender: AddressLike, chainId: BigNumberish],
     [bigint],
     "view"
   >;
@@ -1100,8 +909,11 @@ export interface CrossChainExecutor extends BaseContract {
     "nonpayable"
   >;
   getFunction(
+    nameOrSignature: "markExecuted"
+  ): TypedContractMethod<[messageId: BytesLike], [void], "nonpayable">;
+  getFunction(
     nameOrSignature: "processExpiredMessages"
-  ): TypedContractMethod<[messageIds: BytesLike[]], [void], "nonpayable">;
+  ): TypedContractMethod<[ids: BytesLike[]], [void], "nonpayable">;
   getFunction(
     nameOrSignature: "renounceRole"
   ): TypedContractMethod<
@@ -1123,36 +935,15 @@ export interface CrossChainExecutor extends BaseContract {
       parachainId: BigNumberish,
       recipient: AddressLike,
       assets: IXCM.ParachainAssetStruct[],
-      callData: BytesLike,
+      arg3: BytesLike,
       timeout: BigNumberish
     ],
     [string],
     "payable"
   >;
   getFunction(
-    nameOrSignature: "sendXCM"
-  ): TypedContractMethod<
-    [instruction: IXCM.XCMInstructionStruct],
-    [string],
-    "payable"
-  >;
-  getFunction(
     nameOrSignature: "supportsInterface"
   ): TypedContractMethod<[interfaceId: BytesLike], [boolean], "view">;
-  getFunction(
-    nameOrSignature: "unmapAsset"
-  ): TypedContractMethod<
-    [chainId: BigNumberish, assetId: BytesLike],
-    [void],
-    "nonpayable"
-  >;
-  getFunction(
-    nameOrSignature: "verifyXCM"
-  ): TypedContractMethod<
-    [messageId: BytesLike, proof: BytesLike],
-    [[boolean, string] & { isValid: boolean; decodedMessage: string }],
-    "view"
-  >;
 
   getEvent(
     key: "AssetMapped"
@@ -1160,20 +951,6 @@ export interface CrossChainExecutor extends BaseContract {
     AssetMappedEvent.InputTuple,
     AssetMappedEvent.OutputTuple,
     AssetMappedEvent.OutputObject
-  >;
-  getEvent(
-    key: "AssetUnmapped"
-  ): TypedContractEvent<
-    AssetUnmappedEvent.InputTuple,
-    AssetUnmappedEvent.OutputTuple,
-    AssetUnmappedEvent.OutputObject
-  >;
-  getEvent(
-    key: "AssetsTransferred"
-  ): TypedContractEvent<
-    AssetsTransferredEvent.InputTuple,
-    AssetsTransferredEvent.OutputTuple,
-    AssetsTransferredEvent.OutputObject
   >;
   getEvent(
     key: "ChainConfigured"
@@ -1188,13 +965,6 @@ export interface CrossChainExecutor extends BaseContract {
     ChainDeactivatedEvent.InputTuple,
     ChainDeactivatedEvent.OutputTuple,
     ChainDeactivatedEvent.OutputObject
-  >;
-  getEvent(
-    key: "EIP712DomainChanged"
-  ): TypedContractEvent<
-    EIP712DomainChangedEvent.InputTuple,
-    EIP712DomainChangedEvent.OutputTuple,
-    EIP712DomainChangedEvent.OutputObject
   >;
   getEvent(
     key: "MessageStatusUpdated"
@@ -1246,18 +1016,18 @@ export interface CrossChainExecutor extends BaseContract {
     XCMMessageExpiredEvent.OutputObject
   >;
   getEvent(
-    key: "XCMMessageFailed"
-  ): TypedContractEvent<
-    XCMMessageFailedEvent.InputTuple,
-    XCMMessageFailedEvent.OutputTuple,
-    XCMMessageFailedEvent.OutputObject
-  >;
-  getEvent(
     key: "XCMMessagePrepared"
   ): TypedContractEvent<
     XCMMessagePreparedEvent.InputTuple,
     XCMMessagePreparedEvent.OutputTuple,
     XCMMessagePreparedEvent.OutputObject
+  >;
+  getEvent(
+    key: "XCMSent"
+  ): TypedContractEvent<
+    XCMSentEvent.InputTuple,
+    XCMSentEvent.OutputTuple,
+    XCMSentEvent.OutputObject
   >;
 
   filters: {
@@ -1272,29 +1042,7 @@ export interface CrossChainExecutor extends BaseContract {
       AssetMappedEvent.OutputObject
     >;
 
-    "AssetUnmapped(uint32,bytes32,address)": TypedContractEvent<
-      AssetUnmappedEvent.InputTuple,
-      AssetUnmappedEvent.OutputTuple,
-      AssetUnmappedEvent.OutputObject
-    >;
-    AssetUnmapped: TypedContractEvent<
-      AssetUnmappedEvent.InputTuple,
-      AssetUnmappedEvent.OutputTuple,
-      AssetUnmappedEvent.OutputObject
-    >;
-
-    "AssetsTransferred(bytes32,uint32,address,uint256)": TypedContractEvent<
-      AssetsTransferredEvent.InputTuple,
-      AssetsTransferredEvent.OutputTuple,
-      AssetsTransferredEvent.OutputObject
-    >;
-    AssetsTransferred: TypedContractEvent<
-      AssetsTransferredEvent.InputTuple,
-      AssetsTransferredEvent.OutputTuple,
-      AssetsTransferredEvent.OutputObject
-    >;
-
-    "ChainConfigured(uint32,string,address,uint256)": TypedContractEvent<
+    "ChainConfigured(uint32,string,uint256)": TypedContractEvent<
       ChainConfiguredEvent.InputTuple,
       ChainConfiguredEvent.OutputTuple,
       ChainConfiguredEvent.OutputObject
@@ -1314,17 +1062,6 @@ export interface CrossChainExecutor extends BaseContract {
       ChainDeactivatedEvent.InputTuple,
       ChainDeactivatedEvent.OutputTuple,
       ChainDeactivatedEvent.OutputObject
-    >;
-
-    "EIP712DomainChanged()": TypedContractEvent<
-      EIP712DomainChangedEvent.InputTuple,
-      EIP712DomainChangedEvent.OutputTuple,
-      EIP712DomainChangedEvent.OutputObject
-    >;
-    EIP712DomainChanged: TypedContractEvent<
-      EIP712DomainChangedEvent.InputTuple,
-      EIP712DomainChangedEvent.OutputTuple,
-      EIP712DomainChangedEvent.OutputObject
     >;
 
     "MessageStatusUpdated(bytes32,uint8)": TypedContractEvent<
@@ -1404,18 +1141,7 @@ export interface CrossChainExecutor extends BaseContract {
       XCMMessageExpiredEvent.OutputObject
     >;
 
-    "XCMMessageFailed(bytes32,bytes)": TypedContractEvent<
-      XCMMessageFailedEvent.InputTuple,
-      XCMMessageFailedEvent.OutputTuple,
-      XCMMessageFailedEvent.OutputObject
-    >;
-    XCMMessageFailed: TypedContractEvent<
-      XCMMessageFailedEvent.InputTuple,
-      XCMMessageFailedEvent.OutputTuple,
-      XCMMessageFailedEvent.OutputObject
-    >;
-
-    "XCMMessagePrepared(bytes32,uint32,address,address,address,uint256,uint64)": TypedContractEvent<
+    "XCMMessagePrepared(bytes32,uint32,address,address,address,uint128,uint64)": TypedContractEvent<
       XCMMessagePreparedEvent.InputTuple,
       XCMMessagePreparedEvent.OutputTuple,
       XCMMessagePreparedEvent.OutputObject
@@ -1424,6 +1150,17 @@ export interface CrossChainExecutor extends BaseContract {
       XCMMessagePreparedEvent.InputTuple,
       XCMMessagePreparedEvent.OutputTuple,
       XCMMessagePreparedEvent.OutputObject
+    >;
+
+    "XCMSent(bytes32,bytes,bytes)": TypedContractEvent<
+      XCMSentEvent.InputTuple,
+      XCMSentEvent.OutputTuple,
+      XCMSentEvent.OutputObject
+    >;
+    XCMSent: TypedContractEvent<
+      XCMSentEvent.InputTuple,
+      XCMSentEvent.OutputTuple,
+      XCMSentEvent.OutputObject
     >;
   };
 }

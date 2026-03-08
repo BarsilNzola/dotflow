@@ -11,7 +11,7 @@ import { RouteQuote, SwapPath } from '../types'
 const routerABI = DotFlowRouterArtifact.abi
 const uniswapAdapterABI = UniswapV2AdapterArtifact.abi
 
-const UNISWAP_ADAPTER = '0xB339908346d5307a16DEcD80bB64e6D1cDB46c0a'
+const UNISWAP_ADAPTER = '0xcE6e8394eaEBA3dcC320189D750F55e3Bc3De9D9'
 
 export function useRouteQuote() {
   const { tokenIn, tokenOut, amountIn, slippage, setQuote } = useSwapStore()

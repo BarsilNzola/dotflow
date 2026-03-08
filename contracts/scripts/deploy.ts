@@ -556,9 +556,8 @@ async function main(): Promise<void> {
       const reserves = await pair.getReserves();
       console.log(`  - Reserves: ${reserves[0]} / ${reserves[1]}`);
 
-      console.log("  - Syncing adapter...");
-      await uniswapAdapter.connect(deployer).syncPair(usdcAddress, wdotAddress);
-      console.log("  ✓ Adapter synced");
+      // NOTE: do NOT call syncPair here — sync() after mint corrupts the
+      // K invariant on this non-standard Uniswap fork and breaks all swaps.
     } catch (error: any) {
       console.error(`  ✗ Failed: ${error.message}`);
     }

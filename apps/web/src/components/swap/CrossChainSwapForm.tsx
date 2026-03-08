@@ -11,6 +11,7 @@ import { useCrossChainSwap } from '../../hooks/useCrossChainSwap'
 import { Token } from '../../types'
 import { formatTokenAmount } from '../../lib/utils'
 import { CONTRACT_ADDRESSES } from '../../contracts/addresses'
+import { useAccount } from 'wagmi'
 import toast from 'react-hot-toast'
 
 const DESTINATION_CHAINS = [
@@ -26,14 +27,21 @@ export function CrossChainSwapForm() {
     swapTokens, recipient, setRecipient,
   } = useSwapStore()
 
-  const [showTokenSelect, setShowTokenSelect]     = useState<'in' | 'out' | null>(null)
+  const [showTokenSelect, setShowTokenSelect]       = useState<'in' | 'out' | null>(null)
   const [destinationChainId, setDestinationChainId] = useState(DESTINATION_CHAINS[0].id)
+  const [customRecipient, setCustomRecipient]       = useState(false)
 
   const { balance: tokenInBalance, formatted: tokenInBalanceFormatted, refetch: refetchBalance } = useTokenBalance(tokenIn)
   const { quote } = useRouteQuote()
   const { tx, executeCrossChainSwap, reset }  = useCrossChainSwap()
 
+  const { address: walletAddress } = useAccount()
   const addresses = CONTRACT_ADDRESSES[420420417]
+
+  // Auto-fill recipient with connected wallet — user can override
+  useEffect(() => {
+    if (walletAddress && !customRecipient) setRecipient(walletAddress)
+  }, [walletAddress, customRecipient, setRecipient])
 
   useEffect(() => {
     if (quote) setAmountOut(formatTokenAmount(quote.amountOut, tokenOut?.decimals || 18))
@@ -52,7 +60,6 @@ export function CrossChainSwapForm() {
     if (!isConnected)                            return toast.error('Please connect your wallet')
     if (!tokenIn || !tokenOut)                   return toast.error('Please select tokens')
     if (!amountIn || parseFloat(amountIn) <= 0)  return toast.error('Please enter an amount')
-    if (!recipient)                              return toast.error('Enter recipient address on destination chain')
 
     try {
       await executeCrossChainSwap({
@@ -82,12 +89,11 @@ export function CrossChainSwapForm() {
     if (hasInsufficientBalance) return 'Insufficient Balance'
     if (!tokenIn || !tokenOut) return 'Select Tokens'
     if (!amountIn)             return 'Enter Amount'
-    if (!recipient)            return 'Enter Recipient'
     return 'Swap Cross-Chain'
   }
 
   const isDisabled = isSubmitting || !!hasInsufficientBalance || !isConnected
-    || !tokenIn || !tokenOut || !amountIn || !recipient
+    || !tokenIn || !tokenOut || !amountIn
 
   return (
     <>
@@ -170,12 +176,29 @@ export function CrossChainSwapForm() {
 
         {/* Recipient */}
         <div className="space-y-1.5">
-          <label className="text-sm text-muted-foreground">Recipient on destination chain</label>
-          <input
-            type="text" value={recipient} onChange={e => setRecipient(e.target.value)}
-            placeholder="0x…"
-            className="w-full bg-secondary rounded-xl px-4 py-3 border border-border focus:border-primary outline-none text-sm font-mono"
-          />
+          <div className="flex items-center justify-between">
+            <label className="text-sm text-muted-foreground">Recipient</label>
+            <button
+              onClick={() => {
+                setCustomRecipient(!customRecipient)
+                if (customRecipient && walletAddress) setRecipient(walletAddress)
+              }}
+              className="text-xs text-primary hover:underline"
+            >
+              {customRecipient ? '← Use my wallet' : 'Send to different address'}
+            </button>
+          </div>
+          {customRecipient ? (
+            <input
+              type="text" value={recipient} onChange={e => setRecipient(e.target.value)}
+              placeholder="0x…"
+              className="w-full bg-secondary rounded-xl px-4 py-3 border border-border focus:border-primary outline-none text-sm font-mono"
+            />
+          ) : (
+            <div className="bg-secondary rounded-xl px-4 py-3 border border-border text-sm font-mono text-muted-foreground truncate">
+              {walletAddress ?? 'Connect wallet'}
+            </div>
+          )}
         </div>
 
         {/* XCM fee note */}

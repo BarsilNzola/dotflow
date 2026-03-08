@@ -1,15 +1,14 @@
 /**
  * useCrossChainSwap.ts
  *
- * Hook that handles the full cross-chain swap UI flow:
+ * Bypasses DotFlowRouter entirely — calls adapter and executor directly.
  *
- *  Stage 1 — Approve (user signs approval tx)
- *  Stage 2 — Swap on Hub (UniswapV2: USDC→WDOT via crossChainSwap)
- *  Stage 3 — XCM Dispatch (CrossChainExecutor.sendParachainAssets emits XCMSent)
- *  Stage 4 — Pending on destination (polling getMessageStatus until Executed)
- *
- * IMPORTANT: DotFlowRouter.crossChainSwap handles XCM internally.
- * Path should contain ONLY the local UniswapV2Adapter — NOT ParachainAdapter.
+ * Flow:
+ *  Stage 1 — Approve USDC → UniswapV2Adapter
+ *  Stage 2 — Adapter swap: USDC → WDOT (user receives WDOT)
+ *  Stage 3 — Approve WDOT → CrossChainExecutor
+ *  Stage 4 — Executor: sendParachainAssets (locks WDOT, dispatches XCM)
+ *  Stage 5 — Poll getMessageStatus until Executed
  */
 
 import { useState, useCallback } from 'react'
@@ -24,6 +23,8 @@ export type CrossChainStage =
   | 'approving'
   | 'approved'
   | 'swapping'
+  | 'swap_done'
+  | 'approving_wdot'
   | 'xcm_dispatching'
   | 'xcm_pending'
   | 'xcm_executed'
@@ -33,6 +34,7 @@ export interface CrossChainTx {
   stage:            CrossChainStage
   approveTxHash?:   Hash
   swapTxHash?:      Hash
+  approveWdotHash?: Hash
   xcmTxHash?:       Hash
   messageId?:       `0x${string}`
   error?:           string
@@ -46,40 +48,48 @@ export interface CrossChainTx {
 
 // ─── ABIs ─────────────────────────────────────────────────────────────────────
 
-const crossChainSwapABI = [
+const adapterABI = [
   {
-    name: 'crossChainSwap',
+    name: 'swapExactTokensForTokens',
     type: 'function',
-    stateMutability: 'payable',
+    stateMutability: 'nonpayable',
     inputs: [
-      { name: 'tokenIn',            type: 'address' },
-      { name: 'tokenOut',           type: 'address' },
-      { name: 'amountIn',           type: 'uint256' },
-      { name: 'amountOutMin',       type: 'uint256' },
-      { name: 'recipient',          type: 'address' },
-      {
-        name: 'path',
-        type: 'tuple',
-        components: [
-          { name: 'adapters',          type: 'address[]' },
-          { name: 'path',              type: 'address[]' },
-          { name: 'isCrossChain',      type: 'bool'      },
-          { name: 'destinationChains', type: 'uint32[]'  },
-        ],
-      },
-      { name: 'destinationChainId', type: 'uint32'  },
-      { name: 'xcmCallData',        type: 'bytes'   },
-      { name: 'xcmTimeout',         type: 'uint64'  },
-      { name: 'deadline',           type: 'uint256' },
+      { name: 'tokenIn',      type: 'address' },
+      { name: 'tokenOut',     type: 'address' },
+      { name: 'amountIn',     type: 'uint256' },
+      { name: 'amountOutMin', type: 'uint256' },
+      { name: 'recipient',    type: 'address' },
+      { name: 'data',         type: 'bytes'   },
     ],
     outputs: [
-      { name: 'swapId',       type: 'bytes32' },
-      { name: 'xcmMessageId', type: 'bytes32' },
+      { name: 'amountOut', type: 'uint256' },
+      { name: 'fee',       type: 'uint256' },
     ],
   },
 ] as const
 
 const executorABI = [
+  {
+    name: 'sendParachainAssets',
+    type: 'function',
+    stateMutability: 'payable',
+    inputs: [
+      { name: 'parachainId', type: 'uint32'  },
+      { name: 'recipient',   type: 'address' },
+      {
+        name: 'assets',
+        type: 'tuple[]',
+        components: [
+          { name: 'assetId',  type: 'bytes32' },
+          { name: 'amount',   type: 'uint128' },
+          { name: 'isNative', type: 'bool'    },
+        ],
+      },
+      { name: 'callData', type: 'bytes'  },
+      { name: 'timeout',  type: 'uint64' },
+    ],
+    outputs: [{ name: 'messageId', type: 'bytes32' }],
+  },
   {
     name: 'getMessageStatus',
     type: 'function',
@@ -138,11 +148,15 @@ export function useCrossChainSwap() {
           args:         [messageId],
         }) as number
 
+        console.log(`[crossChainSwap] poll ${i + 1}: status = ${MESSAGE_STATUS[status] ?? status}`)
+
         if (status === 1) { setStage('xcm_executed');                                   return }
         if (status === 2) { setStage('failed', { error: 'XCM failed on destination' }); return }
         if (status === 3) { setStage('failed', { error: 'Message cancelled' });         return }
         if (status === 4) { setStage('failed', { error: 'Message expired' });           return }
-      } catch { /* keep polling */ }
+      } catch (e) {
+        console.warn(`[crossChainSwap] poll ${i + 1} error:`, e)
+      }
     }
     setStage('failed', { error: 'Timeout waiting for XCM execution' })
   }, [publicClient, addresses.crossChainExecutor])
@@ -157,6 +171,7 @@ export function useCrossChainSwap() {
     recipient,
     uniswapAdapterAddress,
     tokenInDecimals = 6,
+    tokenOutDecimals = 18,
     xcmTimeout = 3600,
   }: {
     tokenIn:               string
@@ -167,6 +182,7 @@ export function useCrossChainSwap() {
     recipient:             string
     uniswapAdapterAddress: string
     tokenInDecimals?:      number
+    tokenOutDecimals?:     number
     xcmTimeout?:           number
   }) => {
     if (!userAddress || !walletClient || !publicClient) throw new Error('Wallet not connected')
@@ -178,80 +194,211 @@ export function useCrossChainSwap() {
       tokenIn, tokenOut, destinationChain, recipient,
     })
 
+    console.log('[crossChainSwap] starting direct flow')
+    console.log('[crossChainSwap] adapter:', uniswapAdapterAddress)
+    console.log('[crossChainSwap] executor:', addresses.crossChainExecutor)
+    console.log('[crossChainSwap] amountIn:', amountInRaw.toString())
+
     try {
-      // ── Stage 1: Approve ─────────────────────────────────────────────────
+      // ── Stage 1: Approve USDC → UniswapV2Adapter ─────────────────────────
+      console.log('[crossChainSwap] [1] checking USDC allowance on adapter...')
       const allowance = await publicClient.readContract({
-        address: tokenIn as Address, abi: erc20Abi,
+        address:      tokenIn as Address,
+        abi:          erc20Abi,
         functionName: 'allowance',
-        args: [userAddress, addresses.dotFlowRouter as Address],
+        args:         [userAddress, uniswapAdapterAddress as Address],
       }) as bigint
 
+      console.log('[crossChainSwap] current allowance:', allowance.toString())
+
       if (allowance < amountInRaw) {
+        console.log('[crossChainSwap] approving USDC → adapter...')
         const approveTxHash = await walletClient.writeContract({
-          address: tokenIn as Address, abi: erc20Abi,
+          address:      tokenIn as Address,
+          abi:          erc20Abi,
           functionName: 'approve',
-          args: [addresses.dotFlowRouter as Address, amountInRaw],
+          args:         [uniswapAdapterAddress as Address, amountInRaw],
         })
+        console.log('[crossChainSwap] approve tx:', approveTxHash)
         await publicClient.waitForTransactionReceipt({ hash: approveTxHash })
         setStage('approved', { approveTxHash })
+        console.log('[crossChainSwap] ✓ USDC approved')
       } else {
+        console.log('[crossChainSwap] ✓ USDC already approved')
         setStage('approved')
       }
 
-      // ── Stage 2: Calculate XCM fee ───────────────────────────────────────
-      // Router._calculateWeight("0x") = 1_010_000_000
-      const xcmFee = await publicClient.readContract({
-        address: addresses.crossChainExecutor as Address, abi: executorABI,
-        functionName: 'calculateFee',
-        args: [destinationChain, 1_010_000_000n, amountInRaw],
+      // ── Stage 2: Swap USDC → WDOT via adapter directly ───────────────────
+      // Adapter pulls USDC from user, sends WDOT to user
+      console.log('[crossChainSwap] [2] swapping USDC → WDOT via adapter...')
+      setStage('swapping')
+
+      let swapTxHash: Hash
+      try {
+        swapTxHash = await walletClient.writeContract({
+          address:      uniswapAdapterAddress as Address,
+          abi:          adapterABI,
+          functionName: 'swapExactTokensForTokens',
+          gas:          300_000n,
+          args: [
+            tokenIn      as Address,
+            tokenOut     as Address,
+            amountInRaw,
+            amountOutMin,
+            userAddress,   // user receives WDOT directly
+            '0x',
+          ],
+        })
+        console.log('[crossChainSwap] swap tx:', swapTxHash)
+      } catch (e: any) {
+        console.error('[crossChainSwap] swap FAILED:', e)
+        console.error('[crossChainSwap] cause:', e.cause)
+        console.error('[crossChainSwap] data:', e.data)
+        throw e
+      }
+
+      const swapReceipt = await publicClient.waitForTransactionReceipt({ hash: swapTxHash })
+      console.log('[crossChainSwap] swap receipt status:', swapReceipt.status)
+      console.log('[crossChainSwap] swap gasUsed:', swapReceipt.gasUsed.toString())
+
+      if (swapReceipt.status === 'reverted') {
+        throw new Error(`Swap reverted on-chain (tx: ${swapTxHash})`)
+      }
+
+      setStage('swap_done', { swapTxHash })
+      console.log('[crossChainSwap] ✓ swap done')
+
+      // ── Read WDOT balance to know exact amount received ───────────────────
+      const wdotBalance = await publicClient.readContract({
+        address:      tokenOut as Address,
+        abi:          erc20Abi,
+        functionName: 'balanceOf',
+        args:         [userAddress],
       }) as bigint
 
-      // 20% buffer so router's internal check always passes
+      console.log('[crossChainSwap] WDOT balance after swap:', wdotBalance.toString())
+
+      if (wdotBalance === 0n) {
+        throw new Error('Swap produced 0 WDOT — check pair liquidity')
+      }
+
+      // Use actual received amount for XCM (not estimated)
+      const wdotToSend = wdotBalance
+
+      // ── Stage 3: Calculate XCM fee ────────────────────────────────────────
+      const xcmFee = await publicClient.readContract({
+        address:      addresses.crossChainExecutor as Address,
+        abi:          executorABI,
+        functionName: 'calculateFee',
+        args:         [destinationChain, 1_010_000_000n, wdotToSend],
+      }) as bigint
+
       const xcmFeeWithBuffer = (xcmFee * 120n) / 100n
+      console.log('[crossChainSwap] xcmFee:', xcmFee.toString(), 'with buffer:', xcmFeeWithBuffer.toString())
 
-      // ── Stage 3: crossChainSwap ──────────────────────────────────────────
-      // Only UniswapV2Adapter in path — router handles XCM dispatch itself
-      setStage('swapping')
-      const deadline = BigInt(Math.floor(Date.now() / 1000) + 1800)
+      // ── Stage 4: Approve WDOT → CrossChainExecutor ───────────────────────
+      console.log('[crossChainSwap] [3] checking WDOT allowance on executor...')
+      setStage('approving_wdot')
 
-      const swapTxHash = await walletClient.writeContract({
-        address: addresses.dotFlowRouter as Address,
-        abi: crossChainSwapABI,
-        functionName: 'crossChainSwap',
-        args: [
-          tokenIn  as Address,
-          tokenOut as Address,
-          amountInRaw,
-          amountOutMin,
-          recipient as Address,
-          {
-            adapters:          [uniswapAdapterAddress as Address],
-            path:              [tokenIn as Address, tokenOut as Address],
-            isCrossChain:      true,
-            destinationChains: [destinationChain],
-          },
-          destinationChain,
-          '0x',
-          BigInt(xcmTimeout),
-          deadline,
-        ],
-        value: xcmFeeWithBuffer,
-      })
+      const wdotAllowance = await publicClient.readContract({
+        address:      tokenOut as Address,
+        abi:          erc20Abi,
+        functionName: 'allowance',
+        args:         [userAddress, addresses.crossChainExecutor as Address],
+      }) as bigint
 
-      setStage('xcm_dispatching', { swapTxHash })
-      const receipt = await publicClient.waitForTransactionReceipt({ hash: swapTxHash })
+      console.log('[crossChainSwap] WDOT allowance:', wdotAllowance.toString())
 
-      // ── Stage 4: Extract messageId from CrossChainSwapInitiated event ────
-      // CrossChainSwapInitiated(bytes32 swapId, bytes32 xcmMessageId, uint32 destinationChain, uint256 amount)
-      // xcmMessageId is the second indexed topic (topics[2])
-      const ccEvent = receipt.logs.find(log => log.topics.length >= 3)
-      const messageId = (ccEvent?.topics?.[2] ?? null) as `0x${string}` | null
+      if (wdotAllowance < wdotToSend) {
+        console.log('[crossChainSwap] approving WDOT → executor...')
+        const approveWdotHash = await walletClient.writeContract({
+          address:      tokenOut as Address,
+          abi:          erc20Abi,
+          functionName: 'approve',
+          args:         [addresses.crossChainExecutor as Address, wdotToSend],
+        })
+        console.log('[crossChainSwap] WDOT approve tx:', approveWdotHash)
+        await publicClient.waitForTransactionReceipt({ hash: approveWdotHash })
+        setStage('approving_wdot', { approveWdotHash })
+        console.log('[crossChainSwap] ✓ WDOT approved')
+      } else {
+        console.log('[crossChainSwap] ✓ WDOT already approved')
+      }
 
-      setStage('xcm_pending', { xcmTxHash: swapTxHash, messageId: messageId ?? undefined })
+      // ── Stage 5: sendParachainAssets directly ─────────────────────────────
+      // assetId = tokenOut address zero-padded to bytes32
+      const wdotAssetId = `0x${tokenOut.toLowerCase().replace('0x', '').padStart(64, '0')}` as `0x${string}`
 
-      if (messageId) await pollMessageStatus(messageId)
+      console.log('[crossChainSwap] [4] dispatching XCM...')
+      console.log('[crossChainSwap] assetId:', wdotAssetId)
+      console.log('[crossChainSwap] amount:', wdotToSend.toString())
+      console.log('[crossChainSwap] recipient:', recipient)
+      console.log('[crossChainSwap] destinationChain:', destinationChain)
+
+      setStage('xcm_dispatching')
+
+      let xcmTxHash: Hash
+      try {
+        xcmTxHash = await walletClient.writeContract({
+          address:      addresses.crossChainExecutor as Address,
+          abi:          executorABI,
+          functionName: 'sendParachainAssets',
+          gas:          500_000n,
+          value:        xcmFeeWithBuffer,
+          args: [
+            destinationChain,
+            recipient as Address,
+            [
+              {
+                assetId:  wdotAssetId,
+                amount:   wdotToSend,
+                isNative: false,
+              },
+            ],
+            '0x',
+            BigInt(xcmTimeout),
+          ],
+        })
+        console.log('[crossChainSwap] XCM tx:', xcmTxHash)
+      } catch (e: any) {
+        console.error('[crossChainSwap] XCM dispatch FAILED:', e)
+        console.error('[crossChainSwap] cause:', e.cause)
+        console.error('[crossChainSwap] data:', e.data)
+        throw e
+      }
+
+      const xcmReceipt = await publicClient.waitForTransactionReceipt({ hash: xcmTxHash })
+      console.log('[crossChainSwap] XCM receipt status:', xcmReceipt.status)
+      console.log('[crossChainSwap] XCM gasUsed:', xcmReceipt.gasUsed.toString())
+      console.log('[crossChainSwap] XCM logs:', xcmReceipt.logs.map(l => ({
+        address: l.address, topics: l.topics
+      })))
+
+      if (xcmReceipt.status === 'reverted') {
+        throw new Error(`XCM dispatch reverted on-chain (tx: ${xcmTxHash})`)
+      }
+
+      // ── Extract messageId from executor logs ──────────────────────────────
+      let messageId: `0x${string}` | null = null
+      for (const log of xcmReceipt.logs) {
+        if (log.address.toLowerCase() === addresses.crossChainExecutor.toLowerCase()
+            && log.topics.length >= 2 && log.topics[1]) {
+          messageId = log.topics[1] as `0x${string}`
+          console.log('[crossChainSwap] ✓ found messageId:', messageId)
+          break
+        }
+      }
+
+      if (!messageId) {
+        throw new Error(`XCM tx mined but no messageId found in logs. tx: ${xcmTxHash}`)
+      }
+
+      // ── Stage 6: poll for execution on destination ────────────────────────
+      setStage('xcm_pending', { xcmTxHash, messageId })
+      await pollMessageStatus(messageId)
 
     } catch (err: any) {
+      console.error('[crossChainSwap] FAILED:', err)
       setStage('failed', { error: err.shortMessage ?? err.message ?? 'Unknown error' })
       throw err
     }

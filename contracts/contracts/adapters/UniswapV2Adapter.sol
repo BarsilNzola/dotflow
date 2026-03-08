@@ -126,8 +126,11 @@ contract UniswapV2Adapter is ILiquidityAdapter, AccessControl, ReentrancyGuard {
     /// @dev Uniswap V2 AMM formula: amountOut = (amountIn*9975*reserveOut) / (reserveIn*10000 + amountIn*9975)
     function _calcAmountOut(uint256 amountIn, uint256 reserveIn, uint256 reserveOut) internal pure returns (uint256) {
         require(amountIn > 0 && reserveIn > 0 && reserveOut > 0, "Invalid reserves");
-        uint256 amountInFee = amountIn * 9975;
-        return (amountInFee * reserveOut) / (reserveIn * 10000 + amountInFee);
+        // Standard Uniswap V2 formula: 0.3% fee = 997/1000
+        // MUST match the pair contract's K invariant check which uses 997.
+        // Using 9975/10000 (0.25%) causes K violation: we claim more out than pair allows.
+        uint256 amountInFee = amountIn * 997;
+        return (amountInFee * reserveOut) / (reserveIn * 1000 + amountInFee);
     }
 
     /// @dev Return reserves ordered as (reserveIn, reserveOut) for a given tokenIn/tokenOut.
@@ -194,17 +197,17 @@ contract UniswapV2Adapter is ILiquidityAdapter, AccessControl, ReentrancyGuard {
         PairInfo storage info = _pairInfo[tokenIn][tokenOut];
         if (info.pair == address(0)) revert PairNotInitialized(tokenIn, tokenOut);
 
-        // Pull from router → transfer directly to pair
-        IERC20(tokenIn).safeTransferFrom(msg.sender, info.pair, amountIn);
-
-        // Compute output using live reserves (read AFTER transfer so reserves are current)
+        // Read reserves BEFORE transferring — correct Uniswap V2 pattern.
+        // pair.getReserves() returns stored reserves (pre-transfer).
+        // After safeTransferFrom, pair balance > reserve, enabling the swap.
         (uint256 reserveIn, uint256 reserveOut) = _getOrderedReserves(tokenIn, info);
-        // Reserves still reflect pre-transfer state here (pair hasn't swapped yet)
-        // that is correct — Uniswap reads reserves from storage which update after swap
         amountOut = _calcAmountOut(amountIn, reserveIn, reserveOut);
 
         require(amountOut > 0, "Zero output");
         if (amountOut < amountOutMin) revert SlippageExceeded(amountOutMin, amountOut);
+
+        // Transfer tokenIn to pair AFTER computing output
+        IERC20(tokenIn).safeTransferFrom(msg.sender, info.pair, amountIn);
 
         address token0 = IUniswapV2Pair(info.pair).token0();
         uint256 amount0Out = (token0 == tokenOut) ? amountOut : 0;
@@ -219,7 +222,9 @@ contract UniswapV2Adapter is ILiquidityAdapter, AccessControl, ReentrancyGuard {
 
         _tokenBalances[tokenIn]  = IERC20(tokenIn).balanceOf(address(this));
         _tokenBalances[tokenOut] = IERC20(tokenOut).balanceOf(address(this));
-        _syncPair(tokenIn, tokenOut);
+        // NOTE: do NOT call _syncPair here — pair.sync() after every swap
+        // updates reserves to current balances and breaks the K invariant
+        // for subsequent swaps on this non-standard fork.
 
         emit SwapExecuted(address(this), tokenIn, tokenOut, amountIn, amountOut - feeAmount, feeAmount, recipient);
         return (amountOut - feeAmount, feeAmount);

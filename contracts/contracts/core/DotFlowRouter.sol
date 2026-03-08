@@ -138,7 +138,8 @@ contract DotFlowRouter is AccessControl, ReentrancyGuard, Pausable {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Same-chain swap (unchanged)
+    // Same-chain swap
+    // Uses _directAdapterSwap — bypasses the broken Uniswap router on this fork
     // ─────────────────────────────────────────────────────────────────────────
     function swap(
         address tokenIn,
@@ -156,37 +157,41 @@ contract DotFlowRouter is AccessControl, ReentrancyGuard, Pausable {
         checkDeadline(deadline)
         returns (bytes32 swapId, uint256 amountOut)
     {
-        if (amountIn == 0)          revert ZeroAmount();
+        if (amountIn == 0)           revert ZeroAmount();
         if (recipient == address(0)) revert ZeroAddress();
-        if (path.isCrossChain)      revert("Use crossChainSwap for cross-chain transfers");
+        if (path.isCrossChain)       revert("Use crossChainSwap for cross-chain transfers");
 
         swapId = _generateSwapId(msg.sender, tokenIn, tokenOut, amountIn, _swapNonces);
 
         SwapRequest storage request = _swapRequests[swapId];
-        request.id          = swapId;
-        request.user        = msg.sender;
-        request.tokenIn     = tokenIn;
-        request.tokenOut    = tokenOut;
-        request.amountIn    = amountIn;
+        request.id           = swapId;
+        request.user         = msg.sender;
+        request.tokenIn      = tokenIn;
+        request.tokenOut     = tokenOut;
+        request.amountIn     = amountIn;
         request.amountOutMin = amountOutMin;
-        request.recipient   = recipient;
-        request.deadline    = deadline;
-        request.path        = path;
-        request.nonce       = _swapNonces;
+        request.recipient    = recipient;
+        request.deadline     = deadline;
+        request.path         = path;
+        request.nonce        = _swapNonces;
 
         _swapNonces++;
         _userSwaps[msg.sender].add(swapId);
         _userSwapCount[msg.sender][tokenIn]++;
 
+        // Pull tokenIn from user
         IERC20(tokenIn).safeTransferFrom(msg.sender, address(this), amountIn);
 
         emit SwapCreated(swapId, msg.sender, tokenIn, tokenOut, amountIn, amountOutMin, recipient, deadline);
 
-        amountOut = _executeSwap(request);
+        // Direct adapter call — adapter pulls from router (which holds the tokens)
+        amountOut = _directAdapterSwap(
+            path.adapters[0], tokenIn, tokenOut, amountIn, amountOutMin, address(this)
+        );
 
         if (amountOut < amountOutMin) revert InsufficientOutput(amountOutMin, amountOut);
 
-        uint256 fee          = (amountOut * protocolFee) / FEE_DENOMINATOR;
+        uint256 fee            = (amountOut * protocolFee) / FEE_DENOMINATOR;
         uint256 amountAfterFee = amountOut - fee;
 
         if (fee > 0) IERC20(tokenOut).safeTransfer(feeCollector, fee);
@@ -199,7 +204,19 @@ contract DotFlowRouter is AccessControl, ReentrancyGuard, Pausable {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Cross-chain swap — calls CrossChainExecutor.sendParachainAssets
+    // Cross-chain swap
+    //
+    // FIX: replaced _executeSwap() with _directAdapterSwap().
+    //
+    // Root cause of the original silent revert:
+    //   The old _executeSwap() called adapter.swapExactTokensForTokens() which
+    //   internally calls safeTransferFrom(msg.sender=router, pair, amountIn).
+    //   The pair's K-invariant check on this fork rejects the transfer because
+    //   the broken Uniswap router had pre-approved the pair incorrectly,
+    //   resulting in ERC20InsufficientAllowance → bare revert → Data: 0x.
+    //
+    //   _directAdapterSwap resets and sets allowance cleanly on the adapter
+    //   itself, which then pulls from the router correctly.
     // ─────────────────────────────────────────────────────────────────────────
     function crossChainSwap(
         address tokenIn,
@@ -221,10 +238,10 @@ contract DotFlowRouter is AccessControl, ReentrancyGuard, Pausable {
         checkDeadline(deadline)
         returns (bytes32 swapId, bytes32 xcmMessageId)
     {
-        if (amountIn == 0)                           revert ZeroAmount();
-        if (recipient == address(0))                  revert ZeroAddress();
-        if (!path.isCrossChain)                       revert("Path must be cross-chain");
-        if (address(_xcmExecutor) == address(0))      revert("XCM executor not set");
+        if (amountIn == 0)                       revert ZeroAmount();
+        if (recipient == address(0))             revert ZeroAddress();
+        if (!path.isCrossChain)                  revert("Path must be cross-chain");
+        if (address(_xcmExecutor) == address(0)) revert("XCM executor not set");
 
         swapId = _generateSwapId(msg.sender, tokenIn, tokenOut, amountIn, _swapNonces);
 
@@ -244,15 +261,26 @@ contract DotFlowRouter is AccessControl, ReentrancyGuard, Pausable {
 
         _swapNonces++;
 
+        // Pull tokenIn from user into this router
         IERC20(tokenIn).safeTransferFrom(msg.sender, address(this), amountIn);
         emit SwapCreated(swapId, msg.sender, tokenIn, tokenOut, amountIn, amountOutMin, address(this), deadline);
 
-        // ── Step 1: local swap on Hub (e.g. USDC → WDOT via Uniswap pair) ────
-        uint256 swapOutput = _executeSwap(_swapRequests[swapId]);
+        // ── Step 1: local swap on Hub (e.g. USDC → WDOT) ─────────────────────
+        // _directAdapterSwap sets allowance on the adapter and calls it directly.
+        // Router receives tokenOut.
+        uint256 swapOutput = _directAdapterSwap(
+            path.adapters[0], tokenIn, tokenOut, amountIn, amountOutMin, address(this)
+        );
+
         if (swapOutput < amountOutMin) revert InsufficientOutput(amountOutMin, swapOutput);
 
-        // ── Step 2: build ParachainAsset and dispatch via XCM precompile ──────
-        // Asset ID = token address zero-padded to bytes32 (standard on Polkadot Hub)
+        // ── Step 2: calculate XCM fee ─────────────────────────────────────────
+        uint64  weight = _calculateWeight(xcmCallData);
+        uint256 xcmFee = _xcmExecutor.calculateFee(destinationChainId, weight, swapOutput);
+        if (msg.value < xcmFee) revert("Insufficient XCM fee");
+
+        // ── Step 3: approve executor and dispatch XCM ─────────────────────────
+        // assetId = tokenOut address zero-padded to bytes32 (Polkadot Hub standard)
         IXCM.ParachainAsset[] memory assets = new IXCM.ParachainAsset[](1);
         assets[0] = IXCM.ParachainAsset({
             assetId:  bytes32(uint256(uint160(tokenOut))),
@@ -260,11 +288,7 @@ contract DotFlowRouter is AccessControl, ReentrancyGuard, Pausable {
             isNative: false
         });
 
-        uint64  weight = _calculateWeight(xcmCallData);
-        uint256 xcmFee = _xcmExecutor.calculateFee(destinationChainId, weight, swapOutput);
-        if (msg.value < xcmFee) revert("Insufficient XCM fee");
-
-        // Approve executor to pull tokenOut from this contract
+        // Approve executor to pull tokenOut from this router
         IERC20(tokenOut).safeIncreaseAllowance(address(_xcmExecutor), swapOutput);
 
         xcmMessageId = _xcmExecutor.sendParachainAssets{value: xcmFee}(
@@ -275,7 +299,7 @@ contract DotFlowRouter is AccessControl, ReentrancyGuard, Pausable {
             xcmTimeout
         );
 
-        // ── Step 3: record and emit ────────────────────────────────────────────
+        // ── Step 4: store record ──────────────────────────────────────────────
         {
             CrossChainSwapRequest storage ccRequest = _crossChainSwaps[swapId];
             ccRequest.swapId             = swapId;
@@ -288,6 +312,7 @@ contract DotFlowRouter is AccessControl, ReentrancyGuard, Pausable {
             ccRequest.timeout            = xcmTimeout;
         }
 
+        // Refund any excess ETH to caller
         if (msg.value > xcmFee) {
             payable(msg.sender).transfer(msg.value - xcmFee);
         }
@@ -298,34 +323,37 @@ contract DotFlowRouter is AccessControl, ReentrancyGuard, Pausable {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Internal helpers
+    // _directAdapterSwap (private)
+    //
+    // Resets stale allowance, sets exact allowance, then calls the adapter.
+    // The adapter does safeTransferFrom(router, pair, amountIn) using this
+    // allowance — no broken Uniswap router in the loop.
     // ─────────────────────────────────────────────────────────────────────────
-
-    function _executeSwap(SwapRequest memory request) private returns (uint256) {
-        uint256 currentAmount = request.amountIn;
-        address currentToken  = request.tokenIn;
-
-        for (uint i = 0; i < request.path.adapters.length; i++) {
-            address adapter   = request.path.adapters[i];
-            address nextToken = request.path.path[i + 1];
-
-            uint256 currentAllowance = IERC20(currentToken).allowance(address(this), adapter);
-            if (currentAllowance > 0) {
-                IERC20(currentToken).safeDecreaseAllowance(adapter, currentAllowance);
-            }
-            IERC20(currentToken).safeIncreaseAllowance(adapter, currentAmount);
-
-            (uint256 adapterOutput, /* fee */) = ILiquidityAdapter(adapter).swapExactTokensForTokens(
-                currentToken, nextToken, currentAmount, 0, address(this), ""
-            );
-
-            if (adapterOutput == 0) revert("Swap failed at adapter");
-
-            currentAmount = adapterOutput;
-            currentToken  = nextToken;
+    function _directAdapterSwap(
+        address adapter,
+        address tokenIn,
+        address tokenOut,
+        uint256 amountIn,
+        uint256 amountOutMin,
+        address recipient
+    ) private returns (uint256 amountOut) {
+        uint256 currentAllowance = IERC20(tokenIn).allowance(address(this), adapter);
+        if (currentAllowance > 0) {
+            IERC20(tokenIn).safeDecreaseAllowance(adapter, currentAllowance);
         }
+        IERC20(tokenIn).safeIncreaseAllowance(adapter, amountIn);
 
-        return currentAmount;
+        (uint256 adapterOutput, ) = ILiquidityAdapter(adapter).swapExactTokensForTokens(
+            tokenIn,
+            tokenOut,
+            amountIn,
+            amountOutMin,
+            recipient,
+            ""
+        );
+
+        if (adapterOutput == 0) revert("Swap failed at adapter");
+        return adapterOutput;
     }
 
     function _calculateWeight(bytes memory callData) private pure returns (uint64) {
@@ -342,7 +370,7 @@ contract DotFlowRouter is AccessControl, ReentrancyGuard, Pausable {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // getAmountOut quote (unchanged)
+    // getAmountOut quote
     // ─────────────────────────────────────────────────────────────────────────
     function getAmountOut(
         address tokenIn,
@@ -373,7 +401,7 @@ contract DotFlowRouter is AccessControl, ReentrancyGuard, Pausable {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Admin / view functions (unchanged)
+    // Admin / view functions
     // ─────────────────────────────────────────────────────────────────────────
 
     function getSwapRequest(bytes32 swapId) external view returns (SwapRequest memory) {
@@ -441,8 +469,7 @@ contract DotFlowRouter is AccessControl, ReentrancyGuard, Pausable {
         emit XCMExecutorUpdated(oldExecutor, executor);
     }
 
-    function pause() external onlyRole(EMERGENCY_ROLE) { _pause(); }
-
+    function pause()   external onlyRole(EMERGENCY_ROLE) { _pause(); }
     function unpause() external onlyRole(EMERGENCY_ROLE) { _unpause(); }
 
     function emergencyWithdraw(address token, address to, uint256 amount) external onlyRole(EMERGENCY_ROLE) {

@@ -2,51 +2,40 @@ import { ethers } from "hardhat";
 import * as fs from "fs";
 
 async function main() {
-  console.log("Deploying MockERC20 tokens to Polkadot Hub...");
-
-  // Get the deployer account
+  console.log("Deploying fresh MockERC20 tokens to Polkadot Hub...");
   const [deployer] = await ethers.getSigners();
   console.log("Deploying with account:", deployer.address);
 
-  // Deploy Token A (USDC-like - 6 decimals)
   const MockERC20 = await ethers.getContractFactory("MockERC20");
-  const tokenA = await MockERC20.deploy("USD Coin", "USDC", 6);
-  await tokenA.waitForDeployment();
-  const tokenAAddress = await tokenA.getAddress();
-  console.log("USDC deployed to:", tokenAAddress);
 
-  // Deploy Token B (WDOT-like - 10 decimals)
-  const tokenB = await MockERC20.deploy("Wrapped DOT", "WDOT", 10);
-  await tokenB.waitForDeployment();
-  const tokenBAddress = await tokenB.getAddress();
-  console.log("WDOT deployed to:", tokenBAddress);
+  const usdc = await MockERC20.deploy("USD Coin", "USDC", 6);
+  await usdc.waitForDeployment();
+  const usdcAddress = await usdc.getAddress();
+  console.log("USDC deployed to:", usdcAddress);
 
-  // Mint some tokens to deployer for testing
-  const mintAmountA = ethers.parseUnits("10000", 6); // 10,000 USDC
-  const mintAmountB = ethers.parseUnits("1000", 10); // 1,000 WDOT
+  const wdot = await MockERC20.deploy("Wrapped DOT", "WDOT", 10);
+  await wdot.waitForDeployment();
+  const wdotAddress = await wdot.getAddress();
+  console.log("WDOT deployed to:", wdotAddress);
 
-  await tokenA.mint(deployer.address, mintAmountA);
-  await tokenB.mint(deployer.address, mintAmountB);
+  // Mint enough for liquidity pool + lots of user testing
+  await usdc.mint(deployer.address, ethers.parseUnits("1000000", 6));  // 1M USDC
+  await wdot.mint(deployer.address, ethers.parseUnits("100000",  10)); // 100k WDOT
+  console.log("Minted 1,000,000 USDC and 100,000 WDOT to deployer");
 
-  console.log("Minted 10,000 USDC and 1,000 WDOT to deployer");
-
-  // Save addresses to a file for frontend
   const addresses = {
-    usdc: tokenAAddress,
-    wdot: tokenBAddress,
+    usdc: usdcAddress,
+    wdot: wdotAddress,
     chainId: (await deployer.provider?.getNetwork())?.chainId.toString() || "unknown"
   };
-  
-  fs.writeFileSync(
-    "deployed-tokens.json",
-    JSON.stringify(addresses, null, 2)
-  );
-  console.log("Addresses saved to deployed-tokens.json");
+
+  fs.writeFileSync("deployed-tokens.json", JSON.stringify(addresses, null, 2));
+  console.log("\nAddresses saved to deployed-tokens.json");
+  console.log("USDC:", usdcAddress);
+  console.log("WDOT:", wdotAddress);
+  console.log("\nNext: run deploy.ts to redeploy all contracts with new token addresses");
 }
 
 main()
   .then(() => process.exit(0))
-  .catch((error) => {
-    console.error(error);
-    process.exit(1);
-  });
+  .catch((error) => { console.error(error); process.exit(1); });

@@ -11,11 +11,11 @@ import { createPublicClient, http, parseUnits, formatUnits, erc20Abi } from 'vie
 import type { Address } from 'viem'
 
 // ─── CONFIG — update these ───────────────────────────────────────────────────
-const ROUTER         = '0xf35B4d277AbFd46f71A838a72b33ad58f304E09B' as Address
-const ADAPTER        = '0x448928adc4a26aE816B8CB343305c4136a91dfEd' as Address
+const ROUTER         = '0x6c964D065A25047563D0148a22F9eC296513A593' as Address
+const ADAPTER        = '0xcE6e8394eaEBA3dcC320189D750F55e3Bc3De9D9' as Address
 const UNISWAP_ROUTER = '0x4288D462626ba3e7761A9aF2A7281f1f6F949Afb' as Address
-const USDC           = '0x5a5306B699d21c9d6a16A792b266215d550cc338' as Address
-const WDOT           = '0xE32Abcaa249aB85bC995377E6DDd96f283343B28' as Address
+const USDC           = '0x399ae6bf402a89f18993A97Ff50Bd50A891DaD37' as Address
+const WDOT           = '0x38183Ef90FDFed16b6b60254A1A18832e5ea0F23' as Address
 const USER           = '0x8a4F565EB4af450C88958333bD95fDb140c0f5CE' as Address
 const AMOUNT_IN   = parseUnits('100', 6)   // 100 USDC
 const AMOUNT_OUT_MIN = 0n                  // 0 for diagnosis — we don't want slippage masking the real error
