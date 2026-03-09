@@ -1,7 +1,6 @@
 /**
- * CrossChainStatus.tsx
  *
- * Full-screen overlay (or card) showing the 4-stage cross-chain swap progress:
+ * Full-screen overlay showing the 4-stage cross-chain swap progress:
  *
  *  ① Approve       — user signs ERC-20 approval
  *  ② Swap on Hub   — USDC→WDOT on Uniswap V2 pair

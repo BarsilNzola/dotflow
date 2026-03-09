@@ -237,7 +237,7 @@ npm run dev
 - Relayer network for automatic XCM message confirmation
 - Indexer dashboard UI for swap history and analytics
 - Support for additional parachains beyond Westend Asset Hub
-- Native token (DOT) support as swap input
+- Native token (PAS) support as swap input
 
 ---
 

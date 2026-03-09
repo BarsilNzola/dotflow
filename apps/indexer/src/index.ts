@@ -10,8 +10,8 @@ const POLKADOT_HUB = {
   name: 'Polkadot Hub',
   nativeCurrency: {
     decimals: 10,
-    name: 'DOT',
-    symbol: 'DOT',
+    name: 'PAS',
+    symbol: 'PAS',
   },
   rpcUrls: {
     default: { http: [process.env.RPC_URL || ''] },

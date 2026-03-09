@@ -1,5 +1,3 @@
-// components/layout/Navbar.tsx  — no changes to navigation array needed
-// Cross-chain is surfaced as a tab on /swap, not a separate nav item.
 import { Link, useLocation } from 'react-router-dom'
 import { ConnectButton } from '../wallet/ConnectButton'
 import { NetworkIndicator } from '../wallet/NetworkIndicator'

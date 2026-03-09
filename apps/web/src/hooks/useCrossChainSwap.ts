@@ -1,16 +1,3 @@
-/**
- * useCrossChainSwap.ts
- *
- * Bypasses DotFlowRouter entirely — calls adapter and executor directly.
- *
- * Flow:
- *  Stage 1 — Approve USDC → UniswapV2Adapter
- *  Stage 2 — Adapter swap: USDC → WDOT (user receives WDOT)
- *  Stage 3 — Approve WDOT → CrossChainExecutor
- *  Stage 4 — Executor: sendParachainAssets (locks WDOT, dispatches XCM)
- *  Stage 5 — Poll getMessageStatus until Executed
- */
-
 import { useState, useCallback } from 'react'
 import { usePublicClient, useWalletClient, useAccount } from 'wagmi'
 import { parseUnits, erc20Abi, type Address, type Hash } from 'viem'
@@ -171,7 +158,7 @@ export function useCrossChainSwap() {
     recipient,
     uniswapAdapterAddress,
     tokenInDecimals = 6,
-    tokenOutDecimals = 18,
+    tokenOutDecimals: _tokenOutDecimals = 18,
     xcmTimeout = 3600,
   }: {
     tokenIn:               string

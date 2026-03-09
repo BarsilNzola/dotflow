@@ -10,7 +10,6 @@ import UniswapV2AdapterArtifact from '../contracts/abi/UniswapV2Adapter.json'
 import CrossChainExecutorArtifact from '../contracts/abi/CrossChainExecutor.json'
 import toast from 'react-hot-toast'
 import { Transaction } from '../types'
-import { diagnoseSwap } from './diagnoseSwap'
 
 const routerABI = DotFlowRouterArtifact.abi
 const uniswapAdapterABI = UniswapV2AdapterArtifact.abi
@@ -140,7 +139,7 @@ export function useExecuteRoute() {
       console.log('Amount Out Min (formatted):', formatUnits(amountOutMin, tokenOut.decimals), tokenOut.symbol)
       console.log('Deadline:', deadlineTimestamp.toString())
       console.log('Recipient:', recipient || address)
-      console.log('Path:', JSON.stringify(quote.path, (key, value) => 
+      console.log('Path:', JSON.stringify(quote.path, (_key, value) =>  
         typeof value === 'bigint' ? value.toString() : value, 2))
       // ===================================================
 
@@ -243,7 +242,6 @@ export function useExecuteRoute() {
       }
       // =======================================================
 
-      await diagnoseSwap(publicClient)
 
       // Try to simulate the contract call first
       console.log('\n🎭 Simulating contract call...')
@@ -443,7 +441,7 @@ export function useExecuteRoute() {
 
       // Simulate cross-chain swap
       try {
-        const { request } = await publicClient.simulateContract({
+        await publicClient.simulateContract({
           address: routerAddress,
           abi: routerABI,
           functionName: 'crossChainSwap',
