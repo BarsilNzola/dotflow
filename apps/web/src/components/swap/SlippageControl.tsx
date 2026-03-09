@@ -8,75 +8,61 @@ export function SlippageControl() {
   const { slippage, setSlippage } = useSwapStore()
   const [isCustom, setIsCustom] = useState(!SLIPPAGE_OPTIONS.includes(slippage))
 
-  const handleSlippageChange = (value: number) => {
-    setIsCustom(false)
-    setSlippage(value)
-  }
-
-  const handleCustomChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = parseFloat(e.target.value)
-    if (!isNaN(value)) {
-      setIsCustom(true)
-      setSlippage(value)
-    }
-  }
-
-  const isHighSlippage = slippage > 5
-  const isVeryHighSlippage = slippage > 10
+  const isHigh     = slippage > 5
+  const isVeryHigh = slippage > 10
 
   return (
-    <div className="bg-secondary rounded-xl p-4 space-y-3">
-      <div className="flex justify-between items-center">
-        <span className="text-sm text-muted-foreground">Slippage tolerance</span>
-        <span
-          className={cn(
-            'text-sm font-medium',
-            isVeryHighSlippage ? 'text-red-600' : isHighSlippage ? 'text-yellow-600' : ''
-          )}
-        >
+    <div className="space-y-2.5">
+      <div className="flex items-center justify-between">
+        <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+          Slippage
+        </span>
+        <span className={cn(
+          'font-mono text-xs font-semibold',
+          isVeryHigh ? 'text-red-500' : isHigh ? 'text-yellow-500' : 'text-muted-foreground'
+        )}>
           {slippage}%
         </span>
       </div>
 
-      <div className="flex space-x-2">
-        {SLIPPAGE_OPTIONS.map((option) => (
+      <div className="flex gap-1.5">
+        {SLIPPAGE_OPTIONS.map(opt => (
           <button
-            key={option}
-            onClick={() => handleSlippageChange(option)}
+            key={opt}
+            onClick={() => { setIsCustom(false); setSlippage(opt) }}
             className={cn(
-              'flex-1 py-2 rounded-lg text-sm font-medium transition-colors',
-              !isCustom && slippage === option
+              'flex-1 py-2 rounded-lg font-mono text-xs font-semibold transition-colors',
+              !isCustom && slippage === opt
                 ? 'bg-primary text-primary-foreground'
-                : 'bg-background hover:bg-secondary'
+                : 'bg-secondary text-muted-foreground hover:text-foreground'
             )}
           >
-            {option}%
+            {opt}%
           </button>
         ))}
-        <div className="flex-1">
-          <input
-            type="number"
-            value={isCustom ? slippage : ''}
-            onChange={handleCustomChange}
-            placeholder="Custom"
-            className={cn(
-              'w-full px-3 py-2 rounded-lg text-sm bg-background border focus:outline-none',
-              isCustom ? 'border-primary' : 'border-border'
-            )}
-            min="0"
-            max="50"
-            step="0.1"
-          />
-        </div>
+        <input
+          type="number"
+          value={isCustom ? slippage : ''}
+          onChange={e => {
+            const v = parseFloat(e.target.value)
+            if (!isNaN(v)) { setIsCustom(true); setSlippage(v) }
+          }}
+          placeholder="Custom"
+          min="0" max="50" step="0.1"
+          className={cn(
+            'flex-1 px-2 py-2 rounded-lg font-mono text-xs bg-secondary border text-center outline-none transition-colors',
+            isCustom ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground'
+          )}
+        />
       </div>
 
-      {isVeryHighSlippage && (
-        <p className="text-xs text-red-600">
-          Warning: High slippage tolerance. Your transaction may be frontrun.
+      {isVeryHigh && (
+        <p className="font-mono text-[10px] text-red-500">
+          ⚠ High slippage — transaction may be frontrun.
         </p>
       )}
-      {isHighSlippage && !isVeryHighSlippage && (
-        <p className="text-xs text-yellow-600">
+      {isHigh && !isVeryHigh && (
+        <p className="font-mono text-[10px] text-yellow-500">
           Slippage above 5% may result in unfavorable rates.
         </p>
       )}

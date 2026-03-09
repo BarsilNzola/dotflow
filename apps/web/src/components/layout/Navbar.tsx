@@ -5,44 +5,49 @@ import { cn } from '../../lib/utils'
 
 const navigation = [
   { name: 'Home',      href: '/' },
-  { name: 'Swap',      href: '/swap' },
+  { name: 'Swap',      href: '/swap', badge: 'XCM' },
   { name: 'Dashboard', href: '/dashboard' },
 ]
 
 export function Navbar() {
   const location = useLocation()
+
   return (
-    <nav className="border-b border-border bg-card">
+    <nav className="border-b border-border bg-background/80 backdrop-blur-md sticky top-0 z-40">
       <div className="container mx-auto px-4">
         <div className="flex h-16 items-center justify-between">
-          <div className="flex items-center space-x-8">
-            <Link to="/" className="text-xl font-bold text-primary">
-              DotFlow
+
+          {/* Logo + nav */}
+          <div className="flex items-center gap-8">
+            <Link to="/" className="font-black text-xl tracking-tight">
+              Dot<span className="text-primary">Flow</span>
             </Link>
-            <div className="hidden md:flex items-center space-x-4">
-              {navigation.map((item) => (
+
+            <div className="hidden md:flex items-center gap-1">
+              {navigation.map(item => (
                 <Link
                   key={item.name}
                   to={item.href}
                   className={cn(
-                    'px-3 py-2 text-sm font-medium rounded-md transition-colors',
+                    'flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors',
                     location.pathname === item.href
-                      ? 'bg-primary text-primary-foreground'
-                      : 'text-muted-foreground hover:bg-secondary hover:text-secondary-foreground'
+                      ? 'text-foreground bg-secondary'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-secondary/60'
                   )}
                 >
                   {item.name}
-                  {/* Surface the XCM pill on the Swap nav link as a hint */}
-                  {item.href === '/swap' && (
-                    <span className="ml-1.5 text-[9px] font-bold bg-primary/15 text-primary px-1 py-0.5 rounded align-middle">
-                      XCM
+                  {item.badge && (
+                    <span className="font-mono text-[9px] font-bold bg-primary/15 text-primary px-1.5 py-0.5 rounded-full tracking-wider">
+                      {item.badge}
                     </span>
                   )}
                 </Link>
               ))}
             </div>
           </div>
-          <div className="flex items-center space-x-4">
+
+          {/* Right side */}
+          <div className="flex items-center gap-3">
             <NetworkIndicator />
             <ConnectButton />
           </div>

@@ -10,131 +10,111 @@ export function Dashboard() {
 
   if (!isConnected) {
     return (
-      <div className="text-center py-16">
-        <h2 className="text-2xl font-bold mb-4">Connect Your Wallet</h2>
-        <p className="text-muted-foreground">
-          Please connect your wallet to view your dashboard
-        </p>
+      <div className="min-h-[60vh] flex flex-col items-center justify-center text-center px-4">
+        <div className="font-mono text-xs text-muted-foreground uppercase tracking-widest mb-4">Dashboard</div>
+        <h2 className="text-4xl font-black tracking-tight mb-3">Connect your wallet</h2>
+        <p className="text-muted-foreground text-sm">Your swap history and positions will appear here.</p>
       </div>
     )
   }
 
-  const userTransactions = transactions.filter((tx) => tx.from === address)
+  const userTransactions = transactions.filter(tx => tx.from === address)
+  const swapCount        = userTransactions.filter(tx => tx.type === 'swap').length
+  const crossChainCount  = userTransactions.filter(tx => tx.type === 'cross-chain-swap').length
 
   return (
-    <div className="max-w-6xl mx-auto space-y-8">
-      <h1 className="text-3xl font-bold">Dashboard</h1>
+    <div className="max-w-5xl mx-auto px-4 py-10 space-y-10">
 
-      {/* Stats Cards */}
-      <div className="grid md:grid-cols-4 gap-6">
-        <div className="swap-card p-6">
-          <div className="text-sm text-muted-foreground mb-1">Total Swaps</div>
-          <div className="text-2xl font-bold">
-            {userTransactions.filter((tx) => tx.type === 'swap').length}
+      {/* Header */}
+      <div>
+        <div className="font-mono text-xs text-muted-foreground uppercase tracking-widest mb-2">Overview</div>
+        <h1 className="text-4xl font-black tracking-tight">Dashboard</h1>
+      </div>
+
+      {/* Stats */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-border rounded-2xl overflow-hidden">
+        {[
+          { label: 'Total Swaps',        value: swapCount,               accent: false },
+          { label: 'Cross-Chain Swaps',  value: crossChainCount,         accent: false },
+          { label: 'Pending',            value: pendingTransactions.length, accent: pendingTransactions.length > 0 },
+          { label: 'Total Value',        value: '$0.00',                 accent: false },
+        ].map(({ label, value, accent }) => (
+          <div key={label} className="bg-background p-6">
+            <div className="font-mono text-xs text-muted-foreground uppercase tracking-wider mb-2">{label}</div>
+            <div className={`text-3xl font-black tracking-tight ${accent ? 'text-yellow-500' : ''}`}>
+              {value}
+            </div>
           </div>
-        </div>
-        <div className="swap-card p-6">
-          <div className="text-sm text-muted-foreground mb-1">Cross-Chain Swaps</div>
-          <div className="text-2xl font-bold">
-            {userTransactions.filter((tx) => tx.type === 'cross-chain-swap').length}
-          </div>
-        </div>
-        <div className="swap-card p-6">
-          <div className="text-sm text-muted-foreground mb-1">Pending</div>
-          <div className="text-2xl font-bold text-yellow-600">
-            {pendingTransactions.length}
-          </div>
-        </div>
-        <div className="swap-card p-6">
-          <div className="text-sm text-muted-foreground mb-1">Total Value</div>
-          <div className="text-2xl font-bold">$0.00</div>
-        </div>
+        ))}
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-border">
-        <div className="flex space-x-8">
+      <div className="flex items-center gap-6 border-b border-border">
+        {(['transactions', 'positions'] as const).map(tab => (
           <button
-            onClick={() => setActiveTab('transactions')}
-            className={`pb-4 px-1 font-medium transition-colors relative ${
-              activeTab === 'transactions'
-                ? 'text-primary border-b-2 border-primary'
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            className={`pb-3 font-mono text-xs uppercase tracking-widest transition-colors relative ${
+              activeTab === tab
+                ? 'text-foreground'
                 : 'text-muted-foreground hover:text-foreground'
             }`}
           >
-            Transactions
+            {tab === 'transactions' ? 'Transactions' : 'Liquidity Positions'}
+            {activeTab === tab && (
+              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary rounded-full" />
+            )}
           </button>
-          <button
-            onClick={() => setActiveTab('positions')}
-            className={`pb-4 px-1 font-medium transition-colors relative ${
-              activeTab === 'positions'
-                ? 'text-primary border-b-2 border-primary'
-                : 'text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            Liquidity Positions
-          </button>
-        </div>
+        ))}
       </div>
 
-      {/* Transactions Tab */}
+      {/* Transactions */}
       {activeTab === 'transactions' && (
         <div className="swap-card overflow-hidden">
           {userTransactions.length === 0 ? (
-            <div className="p-8 text-center text-muted-foreground">
-              No transactions yet
+            <div className="py-20 text-center">
+              <div className="font-mono text-xs text-muted-foreground uppercase tracking-widest mb-3">Empty</div>
+              <p className="text-muted-foreground text-sm">No transactions yet — make your first swap.</p>
             </div>
           ) : (
             <table className="w-full">
-              <thead className="bg-secondary">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                    Type
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                    Description
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                    Status
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                    Time
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                    TX Hash
-                  </th>
+              <thead>
+                <tr className="border-b border-border">
+                  {['Type', 'Description', 'Status', 'Time', 'TX Hash'].map(h => (
+                    <th key={h} className="px-5 py-3 text-left font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                      {h}
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {userTransactions.map((tx) => (
-                  <tr key={tx.hash} className="hover:bg-secondary/50 transition-colors">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                        tx.type === 'swap' ? 'bg-blue-100 text-blue-800' :
-                        tx.type === 'cross-chain-swap' ? 'bg-purple-100 text-purple-800' :
-                        'bg-green-100 text-green-800'
+                {userTransactions.map(tx => (
+                  <tr key={tx.hash} className="hover:bg-secondary/40 transition-colors">
+                    <td className="px-5 py-4 whitespace-nowrap">
+                      <span className={`px-2.5 py-1 rounded-full font-mono text-[10px] uppercase tracking-wider ${
+                        tx.type === 'cross-chain-swap'
+                          ? 'bg-primary/10 text-primary'
+                          : 'bg-secondary text-muted-foreground'
                       }`}>
-                        {tx.type}
+                        {tx.type === 'cross-chain-swap' ? 'XCM' : 'Swap'}
                       </span>
                     </td>
-                    <td className="px-6 py-4">
-                      <div className="text-sm">{tx.description}</div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                        tx.status === 'confirmed' ? 'bg-green-100 text-green-800' :
-                        tx.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                        'bg-red-100 text-red-800'
+                    <td className="px-5 py-4 text-sm">{tx.description}</td>
+                    <td className="px-5 py-4 whitespace-nowrap">
+                      <span className={`px-2.5 py-1 rounded-full font-mono text-[10px] uppercase tracking-wider ${
+                        tx.status === 'confirmed' ? 'bg-green-500/10 text-green-500' :
+                        tx.status === 'pending'   ? 'bg-yellow-500/10 text-yellow-500' :
+                                                    'bg-red-500/10 text-red-500'
                       }`}>
                         {tx.status}
                       </span>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground">
+                    <td className="px-5 py-4 whitespace-nowrap font-mono text-xs text-muted-foreground">
                       {formatTimestamp(tx.timestamp / 1000)}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-mono">
+                    <td className="px-5 py-4 whitespace-nowrap font-mono text-xs">
                       <a
-                        href={`https://etherscan.io/tx/${tx.hash}`}
+                        href={`https://blockscout-westend.polkadot.io/tx/${tx.hash}`}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="text-primary hover:underline"
@@ -150,10 +130,11 @@ export function Dashboard() {
         </div>
       )}
 
-      {/* Positions Tab */}
+      {/* Positions */}
       {activeTab === 'positions' && (
-        <div className="swap-card p-8 text-center text-muted-foreground">
-          No active liquidity positions
+        <div className="swap-card py-20 text-center">
+          <div className="font-mono text-xs text-muted-foreground uppercase tracking-widest mb-3">Empty</div>
+          <p className="text-muted-foreground text-sm">No active liquidity positions.</p>
         </div>
       )}
     </div>
