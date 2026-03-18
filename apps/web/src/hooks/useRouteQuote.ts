@@ -32,11 +32,11 @@ export function useRouteQuote() {
   const { data: quote, isLoading, error, refetch } = useQuery({
     queryKey: ['routeQuote', tokenIn?.address, tokenOut?.address, amountIn, chainId, slippage],
     queryFn: async (): Promise<RouteQuote | null> => {
-      console.log('🔥 queryFn executing for:', tokenIn?.symbol, '->', tokenOut?.symbol, 'amount:', amountIn)
+      console.log(' queryFn executing for:', tokenIn?.symbol, '->', tokenOut?.symbol, 'amount:', amountIn)
       
       if (!tokenIn || !tokenOut || !amountIn || !chainId || !publicClient || 
           tokenIn.chainId !== chainId || tokenOut.chainId !== chainId) {
-        console.log('❌ Missing required data for quote', {
+        console.log(' Missing required data for quote', {
           tokenIn: !!tokenIn,
           tokenOut: !!tokenOut,
           amountIn: !!amountIn,

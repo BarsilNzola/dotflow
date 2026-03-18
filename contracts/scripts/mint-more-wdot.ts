@@ -1,7 +1,7 @@
 import { ethers } from "hardhat";
 
 async function main() {
-  console.log("\n💰 Minting more WDOT tokens...\n");
+  console.log("\n Minting more WDOT tokens...\n");
 
   const [deployer] = await ethers.getSigners();
   console.log(`Deployer: ${deployer.address}`);
@@ -21,7 +21,7 @@ async function main() {
   
   const newBalance = await wdot.balanceOf(deployer.address);
   console.log(`New WDOT balance: ${ethers.formatUnits(newBalance, 10)}`);
-  console.log(`✅ Minted ${ethers.formatUnits(mintAmount, 10)} WDOT`);
+  console.log(` Minted ${ethers.formatUnits(mintAmount, 10)} WDOT`);
 }
 
 main()

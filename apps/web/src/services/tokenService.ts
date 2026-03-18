@@ -9,7 +9,7 @@ import deployedTokens from '../contracts/abi/deployed-tokens.json'
 const routerABI = DotFlowRouterArtifact.abi
 const adapterABI = UniswapV2AdapterArtifact.abi
 
-// Your deployed mock tokens
+// deployed mock tokens
 const MOCK_TOKENS: Token[] = [
   {
     address: deployedTokens.usdc,
@@ -51,7 +51,7 @@ export class TokenService {
       return cached
     }
 
-    // First check if it's one of our mock tokens
+    // First check if it's one of the mock tokens
     const mockToken = MOCK_TOKENS.find(
       t => t.address.toLowerCase() === address.toLowerCase() && t.chainId === chainId
     )

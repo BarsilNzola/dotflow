@@ -1,11 +1,8 @@
 /**
- * testDirectSwap.ts
- *
  * Clean atomic test of pair.swap() directly.
  * Reads live reserves → computes amountOut → transfers amountIn → calls swap.
  * No intermediate syncs or extra transfers that corrupt the state.
  *
- * Run: npx hardhat run scripts/testDirectSwap.ts --network polkadotHub
  */
 
 import { ethers } from "hardhat";
@@ -32,14 +29,14 @@ function calcAmountOut(amountIn: bigint, reserveIn: bigint, reserveOut: bigint):
 
 async function main() {
   const [deployer] = await ethers.getSigners();
-  console.log("\n🧪 ========== DIRECT SWAP TEST ==========");
+  console.log("\n ========== DIRECT SWAP TEST ==========");
 
   const pair = new ethers.Contract(PAIR_ADDRESS, pairABI, deployer);
   const usdc = new ethers.Contract(USDC, erc20ABI, deployer);
   const wdot = new ethers.Contract(WDOT, erc20ABI, deployer);
 
   // ── Step 1: Check if pair has any stuck balance from previous test ────────
-  console.log("\n📋 Step 1: Check for stuck tokens in pair");
+  console.log("\n Step 1: Check for stuck tokens in pair");
   const usdcInPair = await usdc.balanceOf(PAIR_ADDRESS) as bigint;
   const wdotInPair = await wdot.balanceOf(PAIR_ADDRESS) as bigint;
   const reserves   = await pair.getReserves() as [bigint, bigint, number];
@@ -56,16 +53,16 @@ async function main() {
 
   // If balance > reserve, there are stuck tokens — sync first to absorb them
   if (usdcInPair > reserveUSDC || wdotInPair > reserveWDOT) {
-    console.log("  ⚠️  Pair has extra tokens vs reserves — calling sync() to absorb");
+    console.log("    Pair has extra tokens vs reserves — calling sync() to absorb");
     const syncTx = await pair.sync();
     await syncTx.wait();
-    console.log("  ✅ Synced");
+    console.log("   Synced");
   } else {
-    console.log("  ✅ Balances match reserves — no sync needed");
+    console.log("   Balances match reserves — no sync needed");
   }
 
   // ── Step 2: Read fresh reserves after sync ────────────────────────────────
-  console.log("\n📋 Step 2: Fresh reserves");
+  console.log("\n Step 2: Fresh reserves");
   const freshReserves = await pair.getReserves() as [bigint, bigint, number];
   const rUSDC = usdcIsT0 ? freshReserves[0] : freshReserves[1];
   const rWDOT = usdcIsT0 ? freshReserves[1] : freshReserves[0];
@@ -76,7 +73,7 @@ async function main() {
   // ── Step 3: Compute amountOut from CURRENT reserves ───────────────────────
   const amountIn = ethers.parseUnits("100", 6); // 100 USDC
   const amountOut = calcAmountOut(amountIn, rUSDC, rWDOT);
-  console.log("\n📋 Step 3: Swap calculation");
+  console.log("\n Step 3: Swap calculation");
   console.log("  amountIn: ", ethers.formatUnits(amountIn, 6), "USDC");
   console.log("  amountOut:", ethers.formatUnits(amountOut, 10), "WDOT");
 
@@ -85,7 +82,7 @@ async function main() {
 
   // ── Step 4: Atomic transfer → swap ───────────────────────────────────────
   // CRITICAL: transfer amountIn to pair, then immediately swap in same block
-  console.log("\n📋 Step 4: Transfer → Swap (atomic)");
+  console.log("\n Step 4: Transfer → Swap (atomic)");
 
   const wdotBefore = await wdot.balanceOf(deployer.address) as bigint;
   console.log("  WDOT before:", ethers.formatUnits(wdotBefore, 10));
@@ -93,7 +90,7 @@ async function main() {
   // Transfer amountIn to pair
   const transferTx = await usdc.transfer(PAIR_ADDRESS, amountIn);
   await transferTx.wait();
-  console.log("  ✅ Transferred 100 USDC to pair");
+  console.log("   Transferred 100 USDC to pair");
 
   // Immediately compute amount0Out / amount1Out
   const amount0Out = usdcIsT0 ? 0n : amountOutMin;
@@ -108,11 +105,11 @@ async function main() {
 
     const wdotAfter = await wdot.balanceOf(deployer.address) as bigint;
     const received  = wdotAfter - wdotBefore;
-    console.log("\n  ✅ SWAP SUCCEEDED!");
+    console.log("\n   SWAP SUCCEEDED!");
     console.log("  WDOT received:", ethers.formatUnits(received, 10));
-    console.log("\n🎉 Pair works. Redeploy UniswapV2Adapter and you're done.\n");
+    console.log("\n Pair works. Redeploy UniswapV2Adapter and you're done.\n");
   } catch (e: any) {
-    console.error("\n  ❌ Swap failed:", e.message);
+    console.error("\n   Swap failed:", e.message);
 
     // Check what the pair sees now
     const postTransferUSDC = await usdc.balanceOf(PAIR_ADDRESS) as bigint;
@@ -135,7 +132,7 @@ async function main() {
     console.log("    balance K(after fee):", kAfterFee.toString());
     console.log("    K check passes?  ", kAfterFee >= kReserve * 10000n * 10000n ? "✅" : "❌");
 
-    console.log("\n  ⚠️  If K check fails here, this fork uses a different fee (not 0.25%).");
+    console.log("\n    If K check fails here, this fork uses a different fee (not 0.25%).");
     console.log("     Try recalculating with 0.3% fee (9970/10000) instead.\n");
 
     // Try with 0.3% fee
@@ -148,10 +145,10 @@ async function main() {
       const retryTx = await pair.swap(amount0OutRetry, amount1OutRetry, deployer.address, "0x");
       await retryTx.wait();
       const wdotAfter2 = await wdot.balanceOf(deployer.address) as bigint;
-      console.log("  ✅ Swap with 0.3% fee succeeded! Received:", ethers.formatUnits(wdotAfter2 - wdotBefore, 10), "WDOT");
+      console.log("   Swap with 0.3% fee succeeded! Received:", ethers.formatUnits(wdotAfter2 - wdotBefore, 10), "WDOT");
       console.log("  → Update _calcAmountOut in UniswapV2Adapter to use 9970 instead of 9975\n");
     } catch (e2: any) {
-      console.error("  ❌ 0.3% fee also failed:", e2.message);
+      console.error("   0.3% fee also failed:", e2.message);
       console.log("\n  This pair may be permanently broken from the repair attempts.");
       console.log("  Recommendation: deploy fresh MockERC20 tokens and start over.\n");
     }

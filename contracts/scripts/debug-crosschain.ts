@@ -1,6 +1,4 @@
 /**
- * npx hardhat run scripts/debug-crosschain.ts --network polkadotHub
- *
  * Isolates exactly which step of crossChainSwap is reverting.
  */
 import { ethers } from 'hardhat'

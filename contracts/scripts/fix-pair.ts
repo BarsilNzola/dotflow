@@ -1,6 +1,4 @@
 /**
- * npx hardhat run scripts/fix-pair.ts --network polkadothub
- *
  * The existing pair is corrupted (UniswapV2: K). This script:
  * 1. Checks if we can burn all LP to drain the pair
  * 2. Creates a fresh pair via the factory (new pair address)

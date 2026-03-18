@@ -1,6 +1,4 @@
 /**
- * Run with: npx hardhat run scripts/check-deployment.ts --network polkadothub
- *
  * Checks every prerequisite for crossChainSwap to succeed:
  *  1. Pair exists and has reserves
  *  2. UniswapV2Adapter has the pair initialized

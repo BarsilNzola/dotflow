@@ -1,7 +1,7 @@
 import { ethers } from "hardhat";
 
 async function main() {
-  console.log("\n💰 Minting more USDC tokens...\n");
+  console.log("\n Minting more USDC tokens...\n");
 
   const [deployer] = await ethers.getSigners();
   console.log(`Deployer: ${deployer.address}`);
@@ -21,7 +21,7 @@ async function main() {
   
   const newBalance = await usdc.balanceOf(deployer.address);
   console.log(`New USDC balance: ${ethers.formatUnits(newBalance, 6)}`);
-  console.log(`✅ Minted ${ethers.formatUnits(mintAmount, 6)} USDC`);
+  console.log(` Minted ${ethers.formatUnits(mintAmount, 6)} USDC`);
 }
 
 main()

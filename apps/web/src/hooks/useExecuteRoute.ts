@@ -30,7 +30,7 @@ export function useExecuteRoute() {
     if (!address || !publicClient) return false
 
     try {
-      console.log('🔍 Checking allowance...')
+      console.log('Checking allowance...')
       const allowance = await publicClient.readContract({
         address: tokenAddress,
         abi: erc20Abi,
@@ -41,11 +41,11 @@ export function useExecuteRoute() {
       console.log(`Current allowance: ${allowance.toString()}, needed: ${amount.toString()}`)
 
       if (allowance >= amount) {
-        console.log('✅ Allowance sufficient')
+        console.log('Allowance sufficient')
         return true
       }
 
-      console.log('❌ Allowance insufficient, requesting approval...')
+      console.log('Allowance insufficient, requesting approval...')
       toast.success(`Please approve ${tokenIn?.symbol} in your wallet`)
       
       const approveHash = await writeContractAsync({
@@ -57,7 +57,7 @@ export function useExecuteRoute() {
 
       console.log('Approval transaction sent:', approveHash)
       await publicClient.waitForTransactionReceipt({ hash: approveHash })
-      console.log('✅ Approval confirmed')
+      console.log('Approval confirmed')
       
       // VERIFY the allowance was actually set
       const newAllowance = await publicClient.readContract({
@@ -70,17 +70,17 @@ export function useExecuteRoute() {
       console.log('New allowance after approval:', newAllowance.toString())
       
       if (newAllowance < amount) {
-        console.error('❌ Approval failed - allowance still insufficient')
+        console.error('Approval failed - allowance still insufficient')
         toast.error('Approval failed. Please try again.')
         return false
       }
       
-      console.log('✅ Allowance verified')
+      console.log('Allowance verified')
       toast.success('Approval successful!')
       return true
 
     } catch (error: any) {
-      console.error('❌ Approval error:', error)
+      console.error('Approval error:', error)
       toast.error(error.message || 'Approval failed')
       return false
     }
@@ -109,7 +109,7 @@ export function useExecuteRoute() {
       
       // Parse amount with token's native decimals
       const amountInParsed = parseUnits(amountIn, tokenIn.decimals)
-      console.log('💰 Amount in parsed (native decimals):', amountInParsed.toString())
+      console.log('Amount in parsed (native decimals):', amountInParsed.toString())
       
       const deadlineTimestamp = BigInt(Math.floor(Date.now() / 1000) + (deadline * 60))
       
@@ -117,7 +117,7 @@ export function useExecuteRoute() {
       const amountOutMin = quote.amountOut - (quote.amountOut * slippageBps / 10000n)
 
       // ==================== DEBUG INFO ====================
-      console.log('\n🔍 ========== SWAP DEBUG INFO ==========')
+      console.log('\n========== SWAP DEBUG INFO ==========')
       console.log('Router Address:', routerAddress)
       console.log('Token In:', {
         address: tokenIn.address,
@@ -144,7 +144,7 @@ export function useExecuteRoute() {
       // ===================================================
 
       // Check token balance
-      console.log('\n💰 Checking balance...')
+      console.log('\n Checking balance...')
       const balance = await publicClient.readContract({
         address: tokenIn.address as Address,
         abi: erc20Abi,
@@ -155,15 +155,15 @@ export function useExecuteRoute() {
       console.log(`${tokenIn.symbol} Balance (formatted):`, formatUnits(balance, tokenIn.decimals), tokenIn.symbol)
       
       if (balance < amountInParsed) {
-        console.error('❌ Insufficient balance')
+        console.error('Insufficient balance')
         toast.error(`Insufficient ${tokenIn.symbol} balance`)
         toast.dismiss(toastId)
         return
       }
-      console.log('✅ Balance sufficient')
+      console.log('Balance sufficient')
 
       // Check and handle approval
-      console.log('\n🔑 Checking allowance...')
+      console.log('\n Checking allowance...')
       const isApproved = await checkAndApprove(
         tokenIn.address as Address,
         routerAddress,
@@ -177,7 +177,7 @@ export function useExecuteRoute() {
 
       // ==================== ADAPTER DEBUG ====================
       const adapterAddress = quote.path.adapters[0] as Address
-      console.log('\n🔧 ========== ADAPTER DEBUG ==========')
+      console.log('\n ========== ADAPTER DEBUG ==========')
       console.log('Adapter Address:', adapterAddress)
       
       try {
@@ -238,13 +238,13 @@ export function useExecuteRoute() {
         console.log('Token Out supported:', isTokenOutSupported)
         
       } catch (adapterError: any) {
-        console.error('❌ Failed to get adapter info:', adapterError)
+        console.error('Failed to get adapter info:', adapterError)
       }
       // =======================================================
 
 
       // Try to simulate the contract call first
-      console.log('\n🎭 Simulating contract call...')
+      console.log('\n Simulating contract call...')
       try {
         const { request } = await publicClient.simulateContract({
           address: routerAddress,
@@ -261,10 +261,10 @@ export function useExecuteRoute() {
           ],
           account: address as Address
         })
-        console.log('✅ Simulation successful!')
+        console.log('Simulation successful!')
         console.log('Transaction request:', request)
       } catch (simulateError: any) {
-        console.error('❌ Simulation failed:', simulateError)
+        console.error('Simulation failed:', simulateError)
         
         // Try to decode the error
         if (simulateError.cause?.data) {
@@ -283,7 +283,7 @@ export function useExecuteRoute() {
           toast.error('Transaction would fail. Check your inputs.')
         }
         
-        console.log('\n📝 Debug information:')
+        console.log('\n Debug information:')
         console.log('Amount In:', amountIn, tokenIn.symbol)
         console.log('Amount Out Min:', formatUnits(amountOutMin, tokenOut.decimals), tokenOut.symbol)
         console.log('Quote Amount Out:', formatUnits(quote.amountOut, tokenOut.decimals), tokenOut.symbol)
@@ -293,7 +293,7 @@ export function useExecuteRoute() {
       }
 
       // Estimate gas
-      console.log('\n⛽ Estimating gas...')
+      console.log('\n Estimating gas...')
       try {
         const gasEstimate = await publicClient.estimateContractGas({
           address: routerAddress,
@@ -310,16 +310,16 @@ export function useExecuteRoute() {
           ],
           account: address as Address
         })
-        console.log('✅ Gas estimate:', gasEstimate.toString())
+        console.log(' Gas estimate:', gasEstimate.toString())
       } catch (estimateError: any) {
-        console.error('❌ Gas estimation failed:', estimateError)
+        console.error(' Gas estimation failed:', estimateError)
         toast.error('Transaction would fail. Check your inputs.')
         toast.dismiss(toastId)
         return
       }
 
       // Send transaction
-      console.log('\n📤 Sending transaction...')
+      console.log('\n Sending transaction...')
       const txHash = await writeContractAsync({
         address: routerAddress,
         abi: routerABI,
@@ -335,7 +335,7 @@ export function useExecuteRoute() {
         ]
       })
 
-      console.log('✅ Transaction sent:', txHash)
+      console.log(' Transaction sent:', txHash)
 
       const transaction: Transaction = {
         hash: txHash,
@@ -363,7 +363,7 @@ export function useExecuteRoute() {
 
       return receipt
     } catch (error: any) {
-      console.error('❌ Swap error:', error)
+      console.error(' Swap error:', error)
       toast.error(error.message || 'Swap failed', { id: toastId })
       throw error
     }
@@ -395,14 +395,14 @@ export function useExecuteRoute() {
       const routerAddress = getContractAddress(chainId as ChainId, 'dotFlowRouter' as ContractName)
       
       const amountInParsed = parseUnits(amountIn, tokenIn.decimals)
-      console.log('💰 Amount in parsed (native decimals):', amountInParsed.toString())
+      console.log(' Amount in parsed (native decimals):', amountInParsed.toString())
       
       const deadlineTimestamp = BigInt(Math.floor(Date.now() / 1000) + 3600)
       
       const slippageBps = BigInt(Math.floor(slippage * 100))
       const amountOutMin = quote.amountOut - (quote.amountOut * slippageBps / 10000n)
 
-      console.log('\n🔍 ========== CROSS-CHAIN SWAP DEBUG ==========')
+      console.log('\n ========== CROSS-CHAIN SWAP DEBUG ==========')
       console.log('Destination Chain:', destinationChainId)
       console.log('XCM Timeout:', xcmTimeout)
       console.log('XCM Call Data:', xcmCallData)
@@ -460,9 +460,9 @@ export function useExecuteRoute() {
           account: address as Address,
           value: xcmFee
         })
-        console.log('✅ Cross-chain simulation successful!')
+        console.log(' Cross-chain simulation successful!')
       } catch (simulateError: any) {
-        console.error('❌ Cross-chain simulation failed:', simulateError)
+        console.error(' Cross-chain simulation failed:', simulateError)
         toast.error('Transaction would fail. Check your inputs.')
         toast.dismiss(toastId)
         return
@@ -489,9 +489,9 @@ export function useExecuteRoute() {
           account: address as Address,
           value: xcmFee
         })
-        console.log('✅ Gas estimate:', gasEstimate.toString())
+        console.log(' Gas estimate:', gasEstimate.toString())
       } catch (estimateError: any) {
-        console.error('❌ Gas estimation failed:', estimateError)
+        console.error(' Gas estimation failed:', estimateError)
         toast.error('Transaction would fail. Check your inputs.')
         toast.dismiss(toastId)
         return

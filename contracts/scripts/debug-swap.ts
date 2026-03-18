@@ -1,6 +1,3 @@
-/**
- * npx hardhat run scripts/debug-swap.ts --network polkadothub
- */
 import { ethers } from 'hardhat'
 
 const A = {

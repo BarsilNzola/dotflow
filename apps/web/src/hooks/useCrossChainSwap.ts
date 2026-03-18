@@ -273,7 +273,7 @@ export function useCrossChainSwap() {
       setStage('swap_done', { swapTxHash })
       console.log('[crossChainSwap] ✓ swap done')
 
-      // ── Read WDOT balance ─────────────────────────────────────────────────
+      // ── Read WDOT balance ──
       const wdotBalance = await publicClient.readContract({
         address:      tokenOut as Address,
         abi:          erc20Abi,
@@ -287,7 +287,7 @@ export function useCrossChainSwap() {
 
       const wdotToSend = wdotBalance
 
-      // ── Stage 3: Calculate XCM fee ────────────────────────────────────────
+      // ── Stage 3: Calculate XCM fee ──
       const xcmFee = await publicClient.readContract({
         address:      addresses.crossChainExecutor as Address,
         abi:          executorABI,
@@ -298,7 +298,7 @@ export function useCrossChainSwap() {
       const xcmFeeWithBuffer = (xcmFee * 120n) / 100n
       console.log('[crossChainSwap] xcmFee:', xcmFee.toString(), 'with buffer:', xcmFeeWithBuffer.toString())
 
-      // ── Stage 4: Approve WDOT → CrossChainExecutor ───────────────────────
+      // ── Stage 4: Approve WDOT → CrossChainExecutor ──
       console.log('[crossChainSwap] [3] checking WDOT allowance on executor...')
       setStage('approving_wdot')
 
@@ -325,7 +325,7 @@ export function useCrossChainSwap() {
         console.log('[crossChainSwap] ✓ WDOT already approved')
       }
 
-      // ── Stage 5: sendParachainAssets ──────────────────────────────────────
+      // ── Stage 5: sendParachainAssets ──
       const wdotAssetId = `0x${tokenOut.toLowerCase().replace('0x', '').padStart(64, '0')}` as `0x${string}`
 
       console.log('[crossChainSwap] [4] dispatching XCM...')
@@ -361,7 +361,7 @@ export function useCrossChainSwap() {
         throw new Error(`XCM dispatch reverted on-chain (tx: ${xcmTxHash})`)
       }
 
-      // ── Record in transaction store → shows up in Dashboard ───────────────
+      // ── Record in transaction store → shows up in Dashboard ──
       addTransaction({
         hash:        xcmTxHash,
         type:        'cross-chain-swap',
@@ -373,7 +373,7 @@ export function useCrossChainSwap() {
         description: `Cross-chain swap ${amountIn} → Chain ${destinationChain}`,
       })
 
-      // ── Extract messageId from executor logs ──────────────────────────────
+      // ── Extract messageId from executor logs ──
       let messageId: `0x${string}` | null = null
       for (const log of xcmReceipt.logs) {
         if (
@@ -390,7 +390,7 @@ export function useCrossChainSwap() {
         throw new Error(`XCM tx mined but no messageId found in logs. tx: ${xcmTxHash}`)
       }
 
-      // ── Stage 6: poll for execution on destination ────────────────────────
+      // ── Stage 6: poll for execution on destination ──
       setStage('xcm_pending', { xcmTxHash, messageId })
       await pollMessageStatus(messageId, xcmTxHash)
 

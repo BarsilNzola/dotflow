@@ -35,7 +35,7 @@ export function Home() {
   return (
     <div className="relative overflow-hidden">
 
-      {/* ── Background dot grid ─────────────────────────────────────────── */}
+      {/* ── Background dot grid ── */}
       <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden opacity-30">
         <div
           ref={gridRef}
@@ -47,7 +47,7 @@ export function Home() {
         />
       </div>
 
-      {/* ── Hero ─────────────────────────────────────────────────────────── */}
+      {/* ── Hero ── */}
       <section className="relative min-h-[88vh] flex flex-col items-center justify-center text-center px-4 py-24">
 
         {/* glow blob */}
@@ -96,7 +96,7 @@ export function Home() {
             />
           </Link>
           <a
-            href="https://github.com/your-org/dotflow"
+            href="https://github.com/BarsilNzola/dotflow"
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-2 px-7 py-3.5 rounded-xl font-semibold text-sm border border-border hover:bg-secondary/60 transition-colors"
@@ -106,7 +106,7 @@ export function Home() {
         </div>
       </section>
 
-      {/* ── Stats bar ────────────────────────────────────────────────────── */}
+      {/* ── Stats bar ── */}
       <section className="border-y border-border/60 py-8 mb-24">
         <div className="grid grid-cols-2 md:grid-cols-4 divide-x divide-border/60">
           {STATS.map(({ value, label }) => (
@@ -118,7 +118,7 @@ export function Home() {
         </div>
       </section>
 
-      {/* ── How it works ─────────────────────────────────────────────────── */}
+      {/* ── How it works ── */}
       <section className="px-4 mb-32 max-w-4xl mx-auto">
         <div className="flex items-center gap-4 mb-12">
           <span className="font-mono text-xs text-muted-foreground uppercase tracking-widest">How it works</span>
@@ -146,7 +146,7 @@ export function Home() {
         </div>
       </section>
 
-      {/* ── Cross-chain callout ───────────────────────────────────────────── */}
+      {/* ── Cross-chain callout ── */}
       <section className="px-4 mb-32 max-w-4xl mx-auto">
         <div
           className="relative rounded-2xl overflow-hidden p-10 md:p-14"
@@ -197,7 +197,7 @@ export function Home() {
         </div>
       </section>
 
-      {/* ── Tech pills ───────────────────────────────────────────────────── */}
+      {/* ── Tech pills ── */}
       <section className="px-4 mb-32 max-w-4xl mx-auto">
         <div className="flex items-center gap-4 mb-8">
           <span className="font-mono text-xs text-muted-foreground uppercase tracking-widest">Built with</span>
@@ -215,7 +215,7 @@ export function Home() {
         </div>
       </section>
 
-      {/* ── CTA footer ───────────────────────────────────────────────────── */}
+      {/* ── CTA footer ── */}
       <section className="text-center px-4 py-24 mb-8">
         <h2 className="text-4xl md:text-5xl font-black tracking-tight mb-6">
           Ready to flow?

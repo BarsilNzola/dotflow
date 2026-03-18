@@ -1,4 +1,3 @@
-// npx hardhat run scripts/check-bytecode.ts --network polkadotHub
 import { ethers } from 'hardhat'
 
 const ROUTER = '0x6c964D065A25047563D0148a22F9eC296513A593'

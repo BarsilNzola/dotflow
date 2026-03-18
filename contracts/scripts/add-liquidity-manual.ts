@@ -1,7 +1,7 @@
 import { ethers } from "hardhat";
 
 async function main() {
-  console.log("\n💧 Adding liquidity manually...\n");
+  console.log("\n Adding liquidity manually...\n");
 
   const [deployer] = await ethers.getSigners();
   console.log(`Deployer: ${deployer.address}`);
@@ -23,7 +23,7 @@ async function main() {
   console.log(`Has code: ${code !== '0x'}`);
   
   if (code === '0x') {
-    throw new Error("❌ No contract deployed at router address!");
+    throw new Error(" No contract deployed at router address!");
   }
 
   const routerAbi = [
@@ -47,13 +47,13 @@ async function main() {
   console.log(`Match: ${weth.toLowerCase() === WPAS_ADDRESS.toLowerCase()}`);
 
   if (factory.toLowerCase() !== FACTORY_ADDRESS.toLowerCase()) {
-    throw new Error("❌ Router has wrong factory address!");
+    throw new Error(" Router has wrong factory address!");
   }
 
   // ===========================================
   // STEP 2: GET TOKEN CONTRACTS
   // ===========================================
-  console.log("\n📄 Getting token contracts...");
+  console.log("\n Getting token contracts...");
   const usdc = await ethers.getContractAt("MockERC20", USDC_ADDRESS);
   const wdot = await ethers.getContractAt("MockERC20", WDOT_ADDRESS);
 
@@ -70,7 +70,7 @@ async function main() {
   // ===========================================
   // STEP 3: CHECK PAIR
   // ===========================================
-  console.log("\n🔍 Checking pair...");
+  console.log("\n Checking pair...");
   const factoryContract = await ethers.getContractAt("IUniswapV2Factory", FACTORY_ADDRESS);
   const pairAddress = await factoryContract.getPair(USDC_ADDRESS, WDOT_ADDRESS);
   console.log(`Pair address: ${pairAddress}`);
@@ -79,9 +79,9 @@ async function main() {
     console.log("Creating pair...");
     const createTx = await factoryContract.createPair(USDC_ADDRESS, WDOT_ADDRESS);
     await createTx.wait();
-    console.log("✅ Pair created!");
+    console.log(" Pair created!");
   } else {
-    console.log("✅ Pair exists");
+    console.log(" Pair exists");
     
     // Check pair contract
     const pairCode = await ethers.provider.getCode(pairAddress);
@@ -89,7 +89,7 @@ async function main() {
     console.log(`Pair has code: ${pairCode !== '0x'}`);
     
     if (pairCode === '0x') {
-      throw new Error("❌ Pair address has no code!");
+      throw new Error(" Pair address has no code!");
     }
     
     // Check reserves
@@ -102,7 +102,7 @@ async function main() {
   // ===========================================
   // STEP 4: CHECK ALLOWANCES
   // ===========================================
-  console.log("\n💰 Checking allowances...");
+  console.log("\n Checking allowances...");
   const usdcAllowance = await usdc.allowance(deployer.address, ROUTER_ADDRESS);
   const wdotAllowance = await wdot.allowance(deployer.address, ROUTER_ADDRESS);
   
@@ -112,7 +112,7 @@ async function main() {
   // ===========================================
     // STEP 5: TRY MINTING DIRECTLY ON THE PAIR
     // ===========================================
-    console.log("\n💧 Trying to mint directly on the pair...");
+    console.log("\n Trying to mint directly on the pair...");
 
     // Use full pair ABI
     const pairAbi = [
@@ -166,7 +166,7 @@ async function main() {
     console.log("\nMinting LP tokens...");
     const mintTx = await pair.mint(deployer.address);
     await mintTx.wait();
-    console.log("✅ LP tokens minted successfully!");
+    console.log(" LP tokens minted successfully!");
     
     // Check new reserves
     const reservesAfter = await pair.getReserves();
@@ -177,7 +177,7 @@ async function main() {
     console.log(`LP tokens received: ${ethers.formatEther(lpBalance)}`);
     
     } catch (error: any) {
-    console.error("\n❌ Failed to mint:", error.message);
+    console.error("\n Failed to mint:", error.message);
     if (error.data) console.error("Error data:", error.data);
     }
 }
@@ -185,6 +185,6 @@ async function main() {
 main()
   .then(() => process.exit(0))
   .catch(error => {
-    console.error("\n❌ Script failed:", error);
+    console.error("\n Script failed:", error);
     process.exit(1);
   });

@@ -1,7 +1,7 @@
 import { ethers } from "hardhat";
 
 async function main() {
-  console.log("\n💰 Minting more tokens...\n");
+  console.log("\n Minting more tokens...\n");
 
   const [deployer] = await ethers.getSigners();
   console.log(`Deployer: ${deployer.address}`);
@@ -22,9 +22,9 @@ async function main() {
     const tx = await usdc.mint(deployer.address, mintAmount);
     await tx.wait();
     const newBalance = await usdc.balanceOf(deployer.address);
-    console.log(`✅ Minted 1000,000 USDC - New balance: ${ethers.formatUnits(newBalance, 6)}`);
+    console.log(` Minted 1000,000 USDC - New balance: ${ethers.formatUnits(newBalance, 6)}`);
   } else {
-    console.log(`✅ USDC balance sufficient: ${ethers.formatUnits(usdcBalance, 6)}`);
+    console.log(` USDC balance sufficient: ${ethers.formatUnits(usdcBalance, 6)}`);
   }
 
   // Check WDOT balance
@@ -37,9 +37,9 @@ async function main() {
     const tx = await wdot.mint(deployer.address, mintAmount);
     await tx.wait();
     const newBalance = await wdot.balanceOf(deployer.address);
-    console.log(`✅ Minted 100,000 WDOT - New balance: ${ethers.formatUnits(newBalance, 10)}`);
+    console.log(` Minted 100,000 WDOT - New balance: ${ethers.formatUnits(newBalance, 10)}`);
   } else {
-    console.log(`✅ WDOT balance sufficient: ${ethers.formatUnits(wdotBalance, 10)}`);
+    console.log(` WDOT balance sufficient: ${ethers.formatUnits(wdotBalance, 10)}`);
   }
 }
 
